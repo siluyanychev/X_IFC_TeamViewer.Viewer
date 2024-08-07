@@ -1,0 +1,90 @@
+﻿body, html {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    height: 100%;
+}
+
+#app {
+    display: flex;
+    height: 100%;
+}
+
+#folder-structure {
+    width: 300px;
+    min-width: 300px;
+    background-color: #f0f0f0;
+    padding: 20px;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+#viewer-container {
+    flex-grow: 1;
+    height: 100%;
+}
+
+#log {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px;
+    font-size: 12px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.folder, .file {
+    margin: 5px 0;
+    padding: 5px;
+}
+
+.folder {
+    cursor: default;
+}
+
+.file {
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+    .file:hover {
+        background-color: #e0e0e0;
+    }
+
+    .file.selected {
+        background-color: #4CAF50;
+        color: white;
+    }
+
+.folder::before {
+    content: '📁 ';
+}
+
+.file::before {
+    content: '📄 ';
+}
+
+.folder.open::before {
+    content: '📂 ';
+}
+
+.toggle-button {
+    cursor: pointer;
+    margin-right: 5px;
+    user-select: none;
+}
+
+ul {
+    list-style-type: none;
+    padding-left: 20px;
+    margin: 0;
+}
+
+h2 {
+    margin-top: 0;
+    color: #333;
+}
