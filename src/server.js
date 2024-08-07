@@ -5,7 +5,7 @@ const msal = require('@azure/msal-node');
 const app = express();
 
 // Загрузка секрета из переменных окружения
-const clientSecret = process.env.AZURE_SECRET;
+const clientSecret = process.env.AZURE_SECRET;//
 
 const config = {
     auth: {
