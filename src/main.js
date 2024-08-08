@@ -7,12 +7,11 @@ let msalInstance;
 
 function log(message, data) {
     console.log(message, data || '');
-    // Здесь вы можете добавить дополнительную логику логирования, если необходимо
 }
 
 async function initMSAL() {
     msalInstance = new msal.PublicClientApplication(msalConfig);
-    console.log('MSAL инициализирован');
+    log('MSAL инициализирован');
 }
 
 async function getAccessToken() {
@@ -25,7 +24,7 @@ async function getAccessToken() {
         const response = await msalInstance.acquireTokenSilent(loginRequest);
         return response.accessToken;
     } catch (error) {
-        console.log('Ошибка при получении токена', { error: error.message });
+        log('Ошибка при получении токена', { error: error.message });
         if (error instanceof msal.InteractionRequiredAuthError) {
             const response = await msalInstance.acquireTokenPopup(loginRequest);
             return response.accessToken;
@@ -49,13 +48,13 @@ async function getFolderContents(driveId, itemId) {
 async function loadIFCFiles(sharedLink, projectName, specificPath) {
     try {
         const accessToken = await getAccessToken();
-        console.log(`Попытка загрузки файлов для проекта: ${projectName}`);
+        log(`Попытка загрузки файлов для проекта: ${projectName}`);
 
         const url = new URL(sharedLink);
         const sitePath = url.pathname.split('/')[3];
         const siteUrl = `https://graph.microsoft.com/v1.0/sites/${url.hostname}:/sites/${sitePath}`;
 
-        console.log(`Запрос информации о сайте: ${siteUrl}`);
+        log(`Запрос информации о сайте: ${siteUrl}`);
         const siteResponse = await fetch(siteUrl, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
         });
@@ -63,9 +62,9 @@ async function loadIFCFiles(sharedLink, projectName, specificPath) {
             throw new Error(`HTTP error when fetching site info! status: ${siteResponse.status}`);
         }
         const siteData = await siteResponse.json();
-        console.log('Полученная информация о сайте:', siteData);
+        log('Полученная информация о сайте:', siteData);
 
-        console.log(`Запрос информации о drive для сайта с id: ${siteData.id}`);
+        log(`Запрос информации о drive для сайта с id: ${siteData.id}`);
         const driveResponse = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drive`, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
         });
@@ -73,13 +72,13 @@ async function loadIFCFiles(sharedLink, projectName, specificPath) {
             throw new Error(`HTTP error when fetching drive info! status: ${driveResponse.status}`);
         }
         const driveData = await driveResponse.json();
-        console.log('Полученная информация о drive:', driveData);
+        log('Полученная информация о drive:', driveData);
 
         if (!driveData.id) {
             throw new Error('Drive ID не найден в ответе API');
         }
 
-        console.log(`Запрос содержимого корневой папки drive: ${driveData.id}`);
+        log(`Запрос содержимого корневой папки drive: ${driveData.id}`);
         const rootFolderUrl = `https://graph.microsoft.com/v1.0/drives/${driveData.id}/root/children`;
         const rootFolderResponse = await fetch(rootFolderUrl, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
@@ -88,20 +87,20 @@ async function loadIFCFiles(sharedLink, projectName, specificPath) {
             throw new Error(`HTTP error when fetching root folder content! status: ${rootFolderResponse.status}`);
         }
         let folderData = await rootFolderResponse.json();
-        console.log('Содержимое корневой папки:', folderData);
+        log('Содержимое корневой папки:', folderData);
 
         if (specificPath) {
-            console.log(`Навигация по пути: ${specificPath}`);
+            log(`Навигация по пути: ${specificPath}`);
             const pathParts = specificPath.split('/');
             for (const folderName of pathParts) {
-                console.log(`Поиск папки: ${folderName}`);
+                log(`Поиск папки: ${folderName}`);
                 const folder = folderData.value.find(item => item.name === folderName && item.folder);
                 if (!folder) {
                     throw new Error(`Папка ${folderName} не найдена в указанном пути`);
                 }
-                console.log(`Найдена папка: ${folderName}, id: ${folder.id}`);
+                log(`Найдена папка: ${folderName}, id: ${folder.id}`);
                 const folderContentUrl = `https://graph.microsoft.com/v1.0/drives/${driveData.id}/items/${folder.id}/children`;
-                console.log(`Запрос содержимого папки: ${folderContentUrl}`);
+                log(`Запрос содержимого папки: ${folderContentUrl}`);
                 const folderContentResponse = await fetch(folderContentUrl, {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 });
@@ -109,7 +108,7 @@ async function loadIFCFiles(sharedLink, projectName, specificPath) {
                     throw new Error(`HTTP error when fetching folder content! status: ${folderContentResponse.status}`);
                 }
                 folderData = await folderContentResponse.json();
-                console.log(`Получено содержимое папки ${folderName}:`, folderData);
+                log(`Получено содержимое папки ${folderName}:`, folderData);
             }
         }
 

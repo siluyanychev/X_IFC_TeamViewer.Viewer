@@ -214,7 +214,7 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
-    viewer.renderer.render(viewer.scene, viewer.camera);
+    renderer.render(scene, camera);
 }
 
 export function clearScene() {
