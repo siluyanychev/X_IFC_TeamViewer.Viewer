@@ -127,7 +127,7 @@ function rotateCamera(angleX, angleY) {
     camera.position.applyQuaternion(quaternionY);
 }
 
-export async function loadIFCModel(url, fileName) {
+export async function loadIFCModel(url, fileName, onProgress) {
     console.log(`Начало загрузки IFC модели: ${fileName}`);
     try {
         const model = await new Promise((resolve, reject) => {
@@ -135,7 +135,11 @@ export async function loadIFCModel(url, fileName) {
                 url,
                 (model) => resolve(model),
                 (progress) => {
-                    console.log(`Загрузка ${fileName}: ${Math.round(progress.loaded / progress.total * 100)}%`);
+                    const percentage = progress.loaded / progress.total;
+                    console.log(`Загрузка ${fileName}: ${Math.round(percentage * 100)}%`);
+                    if (onProgress) {
+                        onProgress(percentage);
+                    }
                 },
                 (error) => reject(error)
             );

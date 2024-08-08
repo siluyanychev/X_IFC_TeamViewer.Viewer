@@ -257,6 +257,7 @@ function getSelectedFiles() {
 
 async function loadSelectedIFCModels(selectedFiles, driveId) {
     console.log('Начало загрузки выбранных IFC моделей', { selectedFilesCount: selectedFiles.length });
+
     if (!viewer) {
         console.log('Viewer не инициализирован, начинаем инициализацию');
         const viewerComponents = initViewer();
@@ -268,9 +269,6 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
         console.log('Viewer успешно инициализирован');
     }
 
-    // Теперь вы можете использовать компоненты viewer'а следующим образом:
-    const { scene, camera, renderer, ifcLoader } = viewer;
-
     clearScene(); // Очищаем сцену перед загрузкой новых моделей
 
     const progressContainer = document.getElementById('progress-container');
@@ -280,6 +278,7 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
 
     const totalFiles = selectedFiles.length;
     let loadedFiles = 0;
+    let totalProgress = 0;
 
     for (const file of selectedFiles) {
         console.log('Начало загрузки IFC модели', { fileName: file.name, fileId: file.id });
@@ -297,7 +296,15 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
             const url = URL.createObjectURL(blob);
 
             console.log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
-            const model = await loadIFCModel(url, file.name);
+            const model = await loadIFCModel(url, file.name, (progress) => {
+                // Обновляем прогресс для текущего файла
+                const fileProgress = progress * (1 / totalFiles);
+                totalProgress = (loadedFiles / totalFiles) + fileProgress;
+                const progressPercentage = Math.round(totalProgress * 100);
+                progressBar.style.width = `${progressPercentage}%`;
+                progressText.textContent = `${progressPercentage}% completed`;
+            });
+
             if (model) {
                 console.log('IFC модель успешно загружена и добавлена на сцену', { fileName: file.name });
             } else {
@@ -307,9 +314,6 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
             URL.revokeObjectURL(url);
 
             loadedFiles++;
-            const progress = (loadedFiles / totalFiles) * 100;
-            progressBar.style.width = `${progress}%`;
-            progressText.textContent = `${Math.round(progress)}% completed`;
         } catch (error) {
             console.error('Ошибка при загрузке IFC модели', { error: error.message, stack: error.stack });
         }
