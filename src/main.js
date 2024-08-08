@@ -120,21 +120,26 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
     log(`Отображение структуры для проекта ${projectName}, количество элементов: ${items.length}`);
     const structureElement = parentElement || document.getElementById('folder-structure');
     if (!parentElement) {
-        structureElement.innerHTML = `<h2>${projectName}</h2>`;
+        structureElement.innerHTML = `<h2 class="text-xl font-bold mb-4">${projectName}</h2>`;
     }
     const ul = document.createElement('ul');
+    ul.className = 'ml-4';
 
     items.forEach(item => {
         log(`Обработка элемента: ${item.name}, тип: ${item.folder ? 'папка' : 'файл'}`);
         const li = document.createElement('li');
-        li.textContent = item.name;
-        li.className = item.folder ? 'folder' : 'file';
+        li.className = item.folder ? 'folder my-2' : 'file my-1 flex items-center';
 
         if (item.folder) {
             const toggleButton = document.createElement('span');
             toggleButton.textContent = '▶';
-            toggleButton.className = 'toggle-button';
-            li.prepend(toggleButton);
+            toggleButton.className = 'toggle-button mr-2 cursor-pointer';
+            li.appendChild(toggleButton);
+
+            const folderName = document.createElement('span');
+            folderName.textContent = item.name;
+            folderName.className = 'font-semibold';
+            li.appendChild(folderName);
 
             toggleButton.onclick = async (event) => {
                 event.stopPropagation();
@@ -152,10 +157,14 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
         } else if (item.name.toLowerCase().endsWith('.ifc')) {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
-            checkbox.className = 'file-checkbox';
+            checkbox.className = 'file-checkbox mr-2';
             checkbox.dataset.fileId = item.id;
             checkbox.dataset.fileName = item.name;
-            li.prepend(checkbox);
+            li.appendChild(checkbox);
+
+            const fileName = document.createElement('span');
+            fileName.textContent = item.name;
+            li.appendChild(fileName);
 
             li.onclick = (event) => {
                 if (event.target !== checkbox) {
@@ -174,6 +183,7 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
     if (!parentElement) {
         const loadButton = document.createElement('button');
         loadButton.id = 'load-selected-files';
+        loadButton.className = 'mt-4 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition duration-300';
         loadButton.textContent = 'Загрузить выбранные файлы';
         loadButton.onclick = () => {
             const selectedFiles = getSelectedFiles();
@@ -187,6 +197,45 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
     }
 
     log('Структура папок отображена');
+}
+// Добавьте эту новую функцию для управления видимостью панели
+function setupFolderStructureVisibility() {
+    const folderStructure = document.getElementById('folder-structure');
+    const viewerContainer = document.getElementById('viewer-container');
+    let isVisible = true;
+    let timeout;
+
+    function showPanel() {
+        folderStructure.style.transform = 'translateX(0)';
+        viewerContainer.style.marginLeft = '300px';
+        isVisible = true;
+    }
+
+    function hidePanel() {
+        folderStructure.style.transform = 'translateX(-100%)';
+        viewerContainer.style.marginLeft = '0';
+        isVisible = false;
+    }
+
+    document.addEventListener('mousemove', (event) => {
+        clearTimeout(timeout);
+        if (event.clientX <= 10) {
+            showPanel();
+        } else if (isVisible && event.clientX > 310) {
+            timeout = setTimeout(hidePanel, 300);
+        }
+    });
+
+    folderStructure.addEventListener('mouseenter', () => {
+        clearTimeout(timeout);
+        showPanel();
+    });
+
+    folderStructure.addEventListener('mouseleave', (event) => {
+        if (event.clientX > 300) {
+            timeout = setTimeout(hidePanel, 300);
+        }
+    });
 }
 
 function updateLoadButton() {
@@ -292,6 +341,7 @@ async function initApp() {
             for (const [projectName, projectInfo] of Object.entries(PROJECT_DATA)) {
                 await loadIFCFiles(projectInfo.sharedLink, projectName, projectInfo.specificPath);
             }
+            setupFolderStructureVisibility();
         }
     } catch (error) {
         log('Ошибка при инициализации приложения', { error: error.message });
