@@ -117,47 +117,51 @@ async function loadIFCFiles(sharedLink, projectName, specificPath) {
 }
 
 function displayFolderStructure(items, projectName, driveId, parentElement = null) {
-    log(`Отображение структуры для проекта ${projectName}, количество элементов: ${items.length}`);
+    console.log(`Отображение структуры для проекта ${projectName}, количество элементов: ${items.length}`);
     const structureElement = parentElement || document.getElementById('folder-structure');
     if (!parentElement) {
         structureElement.innerHTML = `<h2 class="text-xl font-bold mb-4">${projectName}</h2>`;
     }
     const ul = document.createElement('ul');
-    ul.className = 'ml-4';
 
     items.forEach(item => {
-        log(`Обработка элемента: ${item.name}, тип: ${item.folder ? 'папка' : 'файл'}`);
+        console.log(`Обработка элемента: ${item.name}, тип: ${item.folder ? 'папка' : 'файл'}`);
         const li = document.createElement('li');
-        li.className = item.folder ? 'folder my-2' : 'file my-1 flex items-center';
+        li.className = item.folder ? 'folder' : 'file';
 
         if (item.folder) {
+            const folderHeader = document.createElement('div');
+            folderHeader.className = 'folder-header';
+
             const toggleButton = document.createElement('span');
             toggleButton.textContent = '▶';
-            toggleButton.className = 'toggle-button mr-2 cursor-pointer';
-            li.appendChild(toggleButton);
+            toggleButton.className = 'toggle-button';
+            folderHeader.appendChild(toggleButton);
 
             const folderName = document.createElement('span');
             folderName.textContent = item.name;
-            folderName.className = 'font-semibold';
-            li.appendChild(folderName);
+            folderHeader.appendChild(folderName);
 
-            toggleButton.onclick = async (event) => {
+            li.appendChild(folderHeader);
+
+            const folderContent = document.createElement('div');
+            folderContent.className = 'folder-content';
+            li.appendChild(folderContent);
+
+            folderHeader.onclick = async (event) => {
                 event.stopPropagation();
-                const folderContent = li.querySelector('ul');
-                if (folderContent) {
-                    folderContent.style.display = folderContent.style.display === 'none' ? 'block' : 'none';
-                    toggleButton.textContent = folderContent.style.display === 'none' ? '▶' : '▼';
-                } else {
-                    log(`Загрузка содержимого папки: ${item.name}`);
+                li.classList.toggle('open');
+                toggleButton.textContent = li.classList.contains('open') ? '▼' : '▶';
+                if (li.classList.contains('open') && folderContent.children.length === 0) {
+                    console.log(`Загрузка содержимого папки: ${item.name}`);
                     const subFolderContents = await getFolderContents(driveId, item.id);
-                    displayFolderStructure(subFolderContents.value, null, driveId, li);
-                    toggleButton.textContent = '▼';
+                    displayFolderStructure(subFolderContents.value, null, driveId, folderContent);
                 }
             };
         } else if (item.name.toLowerCase().endsWith('.ifc')) {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
-            checkbox.className = 'file-checkbox mr-2';
+            checkbox.className = 'file-checkbox';
             checkbox.dataset.fileId = item.id;
             checkbox.dataset.fileName = item.name;
             li.appendChild(checkbox);
@@ -183,7 +187,6 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
     if (!parentElement) {
         const loadButton = document.createElement('button');
         loadButton.id = 'load-selected-files';
-        loadButton.className = 'mt-4 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition duration-300';
         loadButton.textContent = 'Загрузить выбранные файлы';
         loadButton.onclick = () => {
             const selectedFiles = getSelectedFiles();
@@ -196,7 +199,7 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
         structureElement.appendChild(loadButton);
     }
 
-    log('Структура папок отображена');
+    console.log('Структура папок отображена');
 }
 // Добавьте эту новую функцию для управления видимостью панели
 function setupFolderStructureVisibility() {
@@ -323,29 +326,28 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
 
 
 async function initApp() {
-    log('DOM загружен, начало инициализации приложения');
+    console.log('DOM загружен, начало инициализации приложения');
     try {
         await initMSAL();
         const result = await msalInstance.handleRedirectPromise();
 
         let account = msalInstance.getAllAccounts()[0];
         if (!account) {
-            log('Аккаунт не найден, начинаем процесс входа');
+            console.log('Аккаунт не найден, начинаем процесс входа');
             await msalInstance.loginRedirect({
                 scopes: ["https://graph.microsoft.com/.default"]
             });
         } else {
             msalInstance.setActiveAccount(account);
-            log('Аккаунт найден и установлен как активный, загружаем проекты');
-            log('PROJECT_DATA:', PROJECT_DATA);
+            console.log('Аккаунт найден и установлен как активный, загружаем проекты');
+            console.log('PROJECT_DATA:', PROJECT_DATA);
             for (const [projectName, projectInfo] of Object.entries(PROJECT_DATA)) {
                 await loadIFCFiles(projectInfo.sharedLink, projectName, projectInfo.specificPath);
             }
             setupFolderStructureVisibility();
         }
     } catch (error) {
-        log('Ошибка при инициализации приложения', { error: error.message });
-        console.error('Полная ошибка:', error);
+        console.error('Ошибка при инициализации приложения', error);
     }
 }
 
