@@ -1,12 +1,9 @@
 ﻿import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { IFCLoader } from 'web-ifc-three/IFCLoader';
 
-let scene, camera, renderer;
+let scene, camera, renderer, controls;
 let ifcLoader;
-let isDragging = false;
-let previousMousePosition = { x: 0, y: 0 };
-let isShiftDown = false;
-let isCtrlDown = false;
 
 export function initViewer() {
     console.log('Начало инициализации IFC viewer');
@@ -20,15 +17,21 @@ export function initViewer() {
     scene.background = new THREE.Color(0xf0f0f0);
     console.log('Сцена создана');
 
-    camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
     camera.position.set(10, 10, 10);
-    camera.lookAt(0, 0, 0);
-    console.log('Камера создана, позиция:', camera.position);
+    console.log('Камера создана');
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     container.appendChild(renderer.domElement);
     console.log('Renderer создан и добавлен в DOM');
+
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; // Добавляет инерцию
+    controls.dampingFactor = 0.25;
+    controls.screenSpacePanning = false;
+    controls.maxPolarAngle = Math.PI / 2;
+    console.log('OrbitControls инициализированы');
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
@@ -42,144 +45,11 @@ export function initViewer() {
     console.log('IFCLoader инициализирован');
 
     window.addEventListener('resize', onWindowResize);
-    setupControls();
 
     animate();
 
     console.log('IFC viewer инициализирован');
-    return { scene, camera, renderer, ifcLoader };
-}
-
-function setupControls() {
-    const canvas = renderer.domElement;
-    canvas.addEventListener('mousedown', onMouseDown);
-    canvas.addEventListener('mousemove', onMouseMove);
-    canvas.addEventListener('mouseup', onMouseUp);
-    canvas.addEventListener('wheel', onMouseWheel);
-    canvas.addEventListener('dblclick', onDoubleClick);
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-}
-
-function onMouseDown(event) {
-    if (event.button === 1) { // Middle mouse button
-        isDragging = true;
-        previousMousePosition = {
-            x: event.clientX,
-            y: event.clientY
-        };
-    }
-}
-
-function onMouseMove(event) {
-    if (!isDragging) return;
-
-    const deltaMove = {
-        x: event.clientX - previousMousePosition.x,
-        y: event.clientY - previousMousePosition.y
-    };
-
-    if (isShiftDown) {
-        // Вращение (Shift + средняя кнопка мыши)
-        rotateCamera(deltaMove.x * 0.005, deltaMove.y * 0.005);
-    } else if (isCtrlDown) {
-        // Плавное зумирование (Ctrl + средняя кнопка мыши)
-        const zoomDelta = deltaMove.y * 0.1;
-        zoomCamera(zoomDelta);
-    } else {
-        // Перемещение (только средняя кнопка мыши)
-        panCamera(deltaMove.x * 0.1, deltaMove.y * 0.1);
-    }
-
-    previousMousePosition = {
-        x: event.clientX,
-        y: event.clientY
-    };
-}
-
-function onMouseUp(event) {
-    if (event.button === 1) { // Middle mouse button
-        isDragging = false;
-    }
-}
-
-function onMouseWheel(event) {
-    // Обычное зумирование колесиком мыши
-    const zoomSpeed = 0.001;
-    const zoomDelta = event.deltaY * zoomSpeed;
-    zoomCamera(zoomDelta);
-}
-
-function onDoubleClick(event) {
-    if (event.button === 1) { // Middle mouse button
-        fitCameraToScene();
-    }
-}
-
-function onKeyDown(event) {
-    if (event.key === 'Shift') {
-        isShiftDown = true;
-    } else if (event.key === 'Control') {
-        isCtrlDown = true;
-    }
-}
-
-function onKeyUp(event) {
-    if (event.key === 'Shift') {
-        isShiftDown = false;
-    } else if (event.key === 'Control') {
-        isCtrlDown = false;
-    }
-}
-
-function rotateCamera(angleX, angleY) {
-    const quaternionX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angleX);
-    const quaternionY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), angleY);
-
-    camera.quaternion.premultiply(quaternionX);
-    camera.quaternion.premultiply(quaternionY);
-    camera.position.applyQuaternion(quaternionX);
-    camera.position.applyQuaternion(quaternionY);
-}
-
-function panCamera(deltaX, deltaY) {
-    const right = new THREE.Vector3();
-    const up = new THREE.Vector3(0, 1, 0);
-    camera.getWorldDirection(right).cross(up).normalize();
-
-    camera.position.addScaledVector(right, -deltaX);
-    camera.position.addScaledVector(up, deltaY);
-}
-
-function zoomCamera(delta) {
-    const zoomFactor = 1 - delta;
-    camera.position.multiplyScalar(zoomFactor);
-}
-
-export function fitCameraToScene() {
-    const boundingBox = new THREE.Box3().setFromObject(scene);
-    const center = boundingBox.getCenter(new THREE.Vector3());
-    const size = boundingBox.getSize(new THREE.Vector3());
-
-    console.log('Размеры сцены:', size);
-    console.log('Центр сцены:', center);
-
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const fov = camera.fov * (Math.PI / 180);
-    let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
-
-    cameraZ *= 1.5; // Увеличиваем расстояние, чтобы вся сцена поместилась в кадр
-
-    camera.position.set(center.x, center.y, center.z + cameraZ);
-    camera.lookAt(center);
-
-    const minZ = boundingBox.min.z;
-    const cameraToFarEdge = (minZ < 0) ? -minZ + cameraZ : cameraZ - minZ;
-
-    camera.far = cameraToFarEdge * 3;
-    camera.updateProjectionMatrix();
-
-    console.log('Камера подстроена под сцену, новая позиция:', camera.position);
+    return { scene, camera, renderer, controls, ifcLoader };
 }
 
 function onWindowResize() {
@@ -191,6 +61,7 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
+    controls.update(); // Обновляем контролы в каждом кадре
     renderer.render(scene, camera);
 }
 
@@ -265,7 +136,7 @@ export async function loadIFCModel(url, fileName, onProgress) {
         scene.add(model);
         console.log(`Модель ${fileName} добавлена в сцену`);
 
-        // Подгоняем камеру под новую модель
+        // Центрируем камеру на модели
         fitCameraToScene();
 
         return model;
@@ -273,6 +144,28 @@ export async function loadIFCModel(url, fileName, onProgress) {
         console.error(`Ошибка при загрузке IFC модели ${fileName}:`, error);
         return null;
     }
+}
+
+export function fitCameraToScene() {
+    const box = new THREE.Box3().setFromObject(scene);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = camera.fov * (Math.PI / 180);
+    let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
+
+    cameraZ *= 1.5; // Увеличиваем расстояние, чтобы вся сцена поместилась в кадр
+
+    camera.position.set(center.x, center.y, center.z + cameraZ);
+    camera.lookAt(center);
+
+    // Обновляем контролы
+    controls.target.copy(center);
+    controls.maxDistance = cameraZ * 2;
+    controls.update();
+
+    console.log('Камера и контролы подстроены под сцену');
 }
 
 export function debugScene() {
@@ -287,4 +180,5 @@ export function debugScene() {
     });
     console.log('Позиция камеры:', camera.position);
     console.log('Направление камеры:', camera.getWorldDirection(new THREE.Vector3()));
+    console.log('Цель контролов:', controls.target);
 }
