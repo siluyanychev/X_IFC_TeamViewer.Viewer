@@ -1,4 +1,4 @@
-﻿import { msalConfig, loginRequest, log } from './config.js';
+﻿import { msalConfig, loginRequest } from './config.js';
 import { PROJECT_DATA } from './projectData.js';
 import { initViewer, loadIFCModel, clearScene, fitCameraToScene } from './viewer.js';
 
@@ -7,7 +7,7 @@ let msalInstance;
 
 async function initMSAL() {
     msalInstance = new msal.PublicClientApplication(msalConfig);
-    log('MSAL инициализирован');
+    console.log('MSAL инициализирован');
 }
 
 async function getAccessToken() {
@@ -204,19 +204,16 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
 // Добавьте эту новую функцию для управления видимостью панели
 function setupFolderStructureVisibility() {
     const folderStructure = document.getElementById('folder-structure');
-    const viewerContainer = document.getElementById('viewer-container');
-    let isVisible = true;
+    let isVisible = false;
     let timeout;
 
     function showPanel() {
-        folderStructure.style.transform = 'translateX(0)';
-        viewerContainer.style.marginLeft = '300px';
+        folderStructure.classList.add('visible');
         isVisible = true;
     }
 
     function hidePanel() {
-        folderStructure.style.transform = 'translateX(-100%)';
-        viewerContainer.style.marginLeft = '0';
+        folderStructure.classList.remove('visible');
         isVisible = false;
     }
 
@@ -241,6 +238,7 @@ function setupFolderStructureVisibility() {
     });
 }
 
+
 function updateLoadButton() {
     const selectedFiles = getSelectedFiles();
     const loadButton = document.getElementById('load-selected-files');
@@ -258,16 +256,16 @@ function getSelectedFiles() {
 }
 
 async function loadSelectedIFCModels(selectedFiles, driveId) {
-    log('Начало загрузки выбранных IFC моделей', { selectedFilesCount: selectedFiles.length });
+    console.log('Начало загрузки выбранных IFC моделей', { selectedFilesCount: selectedFiles.length });
 
     if (!viewer) {
-        log('Viewer не инициализирован, начинаем инициализацию');
+        console.log('Viewer не инициализирован, начинаем инициализацию');
         viewer = initViewer();
         if (!viewer) {
-            log('ОШИБКА: Не удалось инициализировать viewer');
+            console.error('ОШИБКА: Не удалось инициализировать viewer');
             return;
         }
-        log('Viewer успешно инициализирован');
+        console.log('Viewer успешно инициализирован');
     }
 
     clearScene(); // Очищаем сцену перед загрузкой новых моделей
@@ -281,7 +279,7 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
     let loadedFiles = 0;
 
     for (const file of selectedFiles) {
-        log('Начало загрузки IFC модели', { fileName: file.name, fileId: file.id });
+        console.log('Начало загрузки IFC модели', { fileName: file.name, fileId: file.id });
         try {
             const accessToken = await getAccessToken();
             const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${file.id}/content`, {
@@ -295,12 +293,12 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);
 
-            log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
+            console.log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
             const model = await loadIFCModel(url, file.name);
             if (model) {
-                log('IFC модель успешно загружена и добавлена на сцену', { fileName: file.name });
+                console.log('IFC модель успешно загружена и добавлена на сцену', { fileName: file.name });
             } else {
-                log('Ошибка: модель не была возвращена функцией loadIFCModel', { fileName: file.name });
+                console.error('Ошибка: модель не была возвращена функцией loadIFCModel', { fileName: file.name });
             }
 
             URL.revokeObjectURL(url);
@@ -310,12 +308,12 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
             progressBar.style.width = `${progress}%`;
             progressText.textContent = `${Math.round(progress)}% completed`;
         } catch (error) {
-            log('Ошибка при загрузке IFC модели', { error: error.message, stack: error.stack });
+            console.error('Ошибка при загрузке IFC модели', { error: error.message, stack: error.stack });
         }
     }
 
-    log('Загрузка и отображение IFC моделей завершены');
-    fitCameraToScene(scene);
+    console.log('Загрузка и отображение IFC моделей завершены');
+    fitCameraToScene();
 
     // Скрываем прогресс-бар после завершения загрузки
     setTimeout(() => {
