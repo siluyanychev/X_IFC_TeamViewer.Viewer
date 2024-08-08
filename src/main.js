@@ -1,18 +1,17 @@
 ﻿import { msalConfig, loginRequest } from './config.js';
 import { PROJECT_DATA } from './projectData.js';
-import { initViewer, loadIFCModel, clearScene, fitCameraToScene } from './viewer.js';
+import { initViewer, loadIFCModel, clearScene, fitCameraToScene, debugScene } from './viewer.js';
 
 let viewer;
 let msalInstance;
 
 function log(message, data) {
     console.log(message, data || '');
-    // Здесь вы можете добавить дополнительную логику логирования, если необходимо
 }
 
 async function initMSAL() {
     msalInstance = new msal.PublicClientApplication(msalConfig);
-    console.log('MSAL инициализирован');
+    log('MSAL инициализирован');
 }
 
 async function getAccessToken() {
@@ -25,7 +24,7 @@ async function getAccessToken() {
         const response = await msalInstance.acquireTokenSilent(loginRequest);
         return response.accessToken;
     } catch (error) {
-        console.log('Ошибка при получении токена', { error: error.message });
+        log('Ошибка при получении токена', { error: error.message });
         if (error instanceof msal.InteractionRequiredAuthError) {
             const response = await msalInstance.acquireTokenPopup(loginRequest);
             return response.accessToken;
@@ -49,13 +48,13 @@ async function getFolderContents(driveId, itemId) {
 async function loadIFCFiles(sharedLink, projectName, specificPath) {
     try {
         const accessToken = await getAccessToken();
-        console.log(`Попытка загрузки файлов для проекта: ${projectName}`);
+        log(`Попытка загрузки файлов для проекта: ${projectName}`);
 
         const url = new URL(sharedLink);
         const sitePath = url.pathname.split('/')[3];
         const siteUrl = `https://graph.microsoft.com/v1.0/sites/${url.hostname}:/sites/${sitePath}`;
 
-        console.log(`Запрос информации о сайте: ${siteUrl}`);
+        log(`Запрос информации о сайте: ${siteUrl}`);
         const siteResponse = await fetch(siteUrl, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
         });
@@ -63,9 +62,9 @@ async function loadIFCFiles(sharedLink, projectName, specificPath) {
             throw new Error(`HTTP error when fetching site info! status: ${siteResponse.status}`);
         }
         const siteData = await siteResponse.json();
-        console.log('Полученная информация о сайте:', siteData);
+        log('Полученная информация о сайте:', siteData);
 
-        console.log(`Запрос информации о drive для сайта с id: ${siteData.id}`);
+        log(`Запрос информации о drive для сайта с id: ${siteData.id}`);
         const driveResponse = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drive`, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
         });
@@ -73,13 +72,13 @@ async function loadIFCFiles(sharedLink, projectName, specificPath) {
             throw new Error(`HTTP error when fetching drive info! status: ${driveResponse.status}`);
         }
         const driveData = await driveResponse.json();
-        console.log('Полученная информация о drive:', driveData);
+        log('Полученная информация о drive:', driveData);
 
         if (!driveData.id) {
             throw new Error('Drive ID не найден в ответе API');
         }
 
-        console.log(`Запрос содержимого корневой папки drive: ${driveData.id}`);
+        log(`Запрос содержимого корневой папки drive: ${driveData.id}`);
         const rootFolderUrl = `https://graph.microsoft.com/v1.0/drives/${driveData.id}/root/children`;
         const rootFolderResponse = await fetch(rootFolderUrl, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
@@ -88,20 +87,20 @@ async function loadIFCFiles(sharedLink, projectName, specificPath) {
             throw new Error(`HTTP error when fetching root folder content! status: ${rootFolderResponse.status}`);
         }
         let folderData = await rootFolderResponse.json();
-        console.log('Содержимое корневой папки:', folderData);
+        log('Содержимое корневой папки:', folderData);
 
         if (specificPath) {
-            console.log(`Навигация по пути: ${specificPath}`);
+            log(`Навигация по пути: ${specificPath}`);
             const pathParts = specificPath.split('/');
             for (const folderName of pathParts) {
-                console.log(`Поиск папки: ${folderName}`);
+                log(`Поиск папки: ${folderName}`);
                 const folder = folderData.value.find(item => item.name === folderName && item.folder);
                 if (!folder) {
                     throw new Error(`Папка ${folderName} не найдена в указанном пути`);
                 }
-                console.log(`Найдена папка: ${folderName}, id: ${folder.id}`);
+                log(`Найдена папка: ${folderName}, id: ${folder.id}`);
                 const folderContentUrl = `https://graph.microsoft.com/v1.0/drives/${driveData.id}/items/${folder.id}/children`;
-                console.log(`Запрос содержимого папки: ${folderContentUrl}`);
+                log(`Запрос содержимого папки: ${folderContentUrl}`);
                 const folderContentResponse = await fetch(folderContentUrl, {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 });
@@ -109,20 +108,20 @@ async function loadIFCFiles(sharedLink, projectName, specificPath) {
                     throw new Error(`HTTP error when fetching folder content! status: ${folderContentResponse.status}`);
                 }
                 folderData = await folderContentResponse.json();
-                console.log(`Получено содержимое папки ${folderName}:`, folderData);
+                log(`Получено содержимое папки ${folderName}:`, folderData);
             }
         }
 
-        console.log('Отображение структуры папок');
+        log('Отображение структуры папок');
         displayFolderStructure(folderData.value, projectName, driveData.id);
     } catch (error) {
-        console.log(`Ошибка при загрузке файлов для проекта ${projectName}`, { error: error.message });
+        log(`Ошибка при загрузке файлов для проекта ${projectName}`, { error: error.message });
         console.error('Полная ошибка:', error);
     }
 }
 
 function displayFolderStructure(items, projectName, driveId, parentElement = null) {
-    console.log(`Отображение структуры для проекта ${projectName}, количество элементов: ${items.length}`);
+    log(`Отображение структуры для проекта ${projectName}, количество элементов: ${items.length}`);
     const structureElement = parentElement || document.getElementById('folder-structure');
     if (!parentElement) {
         structureElement.innerHTML = `<h2 class="text-xl font-bold mb-4">${projectName}</h2>`;
@@ -130,7 +129,7 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
     const ul = document.createElement('ul');
 
     items.forEach(item => {
-        console.log(`Обработка элемента: ${item.name}, тип: ${item.folder ? 'папка' : 'файл'}`);
+        log(`Обработка элемента: ${item.name}, тип: ${item.folder ? 'папка' : 'файл'}`);
         const li = document.createElement('li');
         li.className = item.folder ? 'folder' : 'file';
 
@@ -158,7 +157,7 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
                 li.classList.toggle('open');
                 toggleButton.textContent = li.classList.contains('open') ? '▼' : '▶';
                 if (li.classList.contains('open') && folderContent.children.length === 0) {
-                    console.log(`Загрузка содержимого папки: ${item.name}`);
+                    log(`Загрузка содержимого папки: ${item.name}`);
                     const subFolderContents = await getFolderContents(driveId, item.id);
                     displayFolderStructure(subFolderContents.value, null, driveId, folderContent);
                 }
@@ -204,9 +203,9 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
         structureElement.appendChild(loadButton);
     }
 
-    console.log('Структура папок отображена');
+    log('Структура папок отображена');
 }
-// Добавьте эту новую функцию для управления видимостью панели
+
 function setupFolderStructureVisibility() {
     const folderStructure = document.getElementById('folder-structure');
     let isVisible = false;
@@ -243,7 +242,6 @@ function setupFolderStructureVisibility() {
     });
 }
 
-
 function updateLoadButton() {
     const selectedFiles = getSelectedFiles();
     const loadButton = document.getElementById('load-selected-files');
@@ -261,19 +259,19 @@ function getSelectedFiles() {
 }
 
 async function loadSelectedIFCModels(selectedFiles, driveId) {
-    console.log('Начало загрузки выбранных IFC моделей', { selectedFilesCount: selectedFiles.length });
+    log('Начало загрузки выбранных IFC моделей', { selectedFilesCount: selectedFiles.length });
 
     if (!viewer) {
-        console.log('Viewer не инициализирован, начинаем инициализацию');
+        log('Viewer не инициализирован, начинаем инициализацию');
         viewer = initViewer();
         if (!viewer) {
             console.error('ОШИБКА: Не удалось инициализировать viewer');
             return;
         }
-        console.log('Viewer успешно инициализирован');
+        log('Viewer успешно инициализирован');
     }
 
-    console.log('Очистка сцены перед загрузкой новых моделей');
+    log('Очистка сцены перед загрузкой новых моделей');
     clearScene();
 
     const progressContainer = document.getElementById('progress-container');
@@ -286,7 +284,7 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
     let totalProgress = 0;
 
     for (const file of selectedFiles) {
-        console.log('Начало загрузки IFC модели', { fileName: file.name, fileId: file.id });
+        log('Начало загрузки IFC модели', { fileName: file.name, fileId: file.id });
         try {
             const accessToken = await getAccessToken();
             const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${file.id}/content`, {
@@ -300,7 +298,7 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);
 
-            console.log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
+            log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
             const model = await loadIFCModel(url, file.name, (progress) => {
                 const fileProgress = progress * (1 / totalFiles);
                 totalProgress = (loadedFiles / totalFiles) + fileProgress;
@@ -310,7 +308,7 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
             });
 
             if (model) {
-                console.log('IFC модель успешно загружена и добавлена на сцену', { fileName: file.name });
+                log('IFC модель успешно загружена и добавлена на сцену', { fileName: file.name });
             } else {
                 console.error('Ошибка: модель не была возвращена функцией loadIFCModel', { fileName: file.name });
             }
@@ -323,8 +321,11 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
         }
     }
 
-    console.log('Загрузка и отображение IFC моделей завершены');
+    log('Загрузка и отображение IFC моделей завершены');
     fitCameraToScene();
+
+    // Вызываем функцию отладки
+    debugScene();
 
     // Скрываем прогресс-бар после завершения загрузки
     setTimeout(() => {
@@ -333,21 +334,21 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
 }
 
 async function initApp() {
-    console.log('DOM загружен, начало инициализации приложения');
+    log('DOM загружен, начало инициализации приложения');
     try {
         await initMSAL();
         const result = await msalInstance.handleRedirectPromise();
 
         let account = msalInstance.getAllAccounts()[0];
         if (!account) {
-            console.log('Аккаунт не найден, начинаем процесс входа');
+            log('Аккаунт не найден, начинаем процесс входа');
             await msalInstance.loginRedirect({
                 scopes: ["https://graph.microsoft.com/.default"]
             });
         } else {
             msalInstance.setActiveAccount(account);
-            console.log('Аккаунт найден и установлен как активный, загружаем проекты');
-            console.log('PROJECT_DATA:', PROJECT_DATA);
+            log('Аккаунт найден и установлен как активный, загружаем проекты');
+            log('PROJECT_DATA:', PROJECT_DATA);
             for (const [projectName, projectInfo] of Object.entries(PROJECT_DATA)) {
                 await loadIFCFiles(projectInfo.sharedLink, projectName, projectInfo.specificPath);
             }
@@ -357,7 +358,7 @@ async function initApp() {
             if (!viewer) {
                 viewer = initViewer();
                 if (viewer) {
-                    console.log('Viewer успешно инициализирован');
+                    log('Viewer успешно инициализирован');
                 } else {
                     console.error('ОШИБКА: Не удалось инициализировать viewer');
                 }
