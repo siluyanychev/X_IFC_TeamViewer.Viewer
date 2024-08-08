@@ -5,7 +5,8 @@ let scene, camera, renderer;
 let ifcLoader;
 let isDragging = false;
 let previousMousePosition = { x: 0, y: 0 };
-let currentMousePosition = { x: 0, y: 0 };
+let isShiftDown = false;
+let isCtrlDown = false;
 
 export function initViewer() {
     console.log('Начало инициализации IFC viewer');
@@ -29,10 +30,10 @@ export function initViewer() {
     container.appendChild(renderer.domElement);
     console.log('Renderer создан и добавлен в DOM');
 
-    const light = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(light);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    directionalLight.position.set(0, 10, 0);
+    directionalLight.position.set(10, 10, 10);
     scene.add(directionalLight);
     console.log('Освещение добавлено');
 
@@ -48,72 +49,87 @@ export function initViewer() {
     console.log('IFC viewer инициализирован');
     return { scene, camera, renderer, ifcLoader };
 }
+
 function setupControls() {
     const canvas = renderer.domElement;
-
     canvas.addEventListener('mousedown', onMouseDown);
     canvas.addEventListener('mousemove', onMouseMove);
     canvas.addEventListener('mouseup', onMouseUp);
     canvas.addEventListener('wheel', onMouseWheel);
-
+    canvas.addEventListener('dblclick', onDoubleClick);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 }
 
 function onMouseDown(event) {
-    isDragging = true;
-    previousMousePosition = { x: event.clientX, y: event.clientY };
+    if (event.button === 1) { // Middle mouse button
+        isDragging = true;
+        previousMousePosition = {
+            x: event.clientX,
+            y: event.clientY
+        };
+    }
 }
 
 function onMouseMove(event) {
-    currentMousePosition = { x: event.clientX, y: event.clientY };
+    if (!isDragging) return;
 
-    if (isDragging) {
-        const deltaMove = {
-            x: currentMousePosition.x - previousMousePosition.x,
-            y: currentMousePosition.y - previousMousePosition.y
-        };
+    const deltaMove = {
+        x: event.clientX - previousMousePosition.x,
+        y: event.clientY - previousMousePosition.y
+    };
 
-        if (event.buttons === 1) { // Left mouse button
-            if (event.shiftKey) {
-                // Pan
-                const speed = 0.05;
-                camera.position.x -= deltaMove.x * speed;
-                camera.position.y += deltaMove.y * speed;
-            } else {
-                // Orbit
-                const speed = 0.01;
-                rotateCamera(deltaMove.x * speed, deltaMove.y * speed);
-            }
-        } else if (event.buttons === 4) { // Middle mouse button
-            // Pan
-            const speed = 0.05;
-            camera.position.x -= deltaMove.x * speed;
-            camera.position.y += deltaMove.y * speed;
-        }
+    if (isShiftDown) {
+        // Вращение (Shift + средняя кнопка мыши)
+        rotateCamera(deltaMove.x * 0.005, deltaMove.y * 0.005);
+    } else if (isCtrlDown) {
+        // Плавное зумирование (Ctrl + средняя кнопка мыши)
+        const zoomDelta = deltaMove.y * 0.1;
+        zoomCamera(zoomDelta);
+    } else {
+        // Перемещение (только средняя кнопка мыши)
+        panCamera(deltaMove.x * 0.1, deltaMove.y * 0.1);
     }
 
-    previousMousePosition = { x: currentMousePosition.x, y: currentMousePosition.y };
+    previousMousePosition = {
+        x: event.clientX,
+        y: event.clientY
+    };
 }
 
-function onMouseUp() {
-    isDragging = false;
+function onMouseUp(event) {
+    if (event.button === 1) { // Middle mouse button
+        isDragging = false;
+    }
 }
 
 function onMouseWheel(event) {
-    const zoomSpeed = 0.1;
-    const zoomFactor = event.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
-    camera.position.multiplyScalar(zoomFactor);
+    // Обычное зумирование колесиком мыши
+    const zoomSpeed = 0.001;
+    const zoomDelta = event.deltaY * zoomSpeed;
+    zoomCamera(zoomDelta);
 }
 
-function onKeyDown(event) {
-    if (event.key === 'f' || event.key === 'F') {
+function onDoubleClick(event) {
+    if (event.button === 1) { // Middle mouse button
         fitCameraToScene();
     }
 }
 
+function onKeyDown(event) {
+    if (event.key === 'Shift') {
+        isShiftDown = true;
+    } else if (event.key === 'Control') {
+        isCtrlDown = true;
+    }
+}
+
 function onKeyUp(event) {
-    // Можно добавить дополнительные действия при отпускании клавиш
+    if (event.key === 'Shift') {
+        isShiftDown = false;
+    } else if (event.key === 'Control') {
+        isCtrlDown = false;
+    }
 }
 
 function rotateCamera(angleX, angleY) {
@@ -124,6 +140,79 @@ function rotateCamera(angleX, angleY) {
     camera.quaternion.premultiply(quaternionY);
     camera.position.applyQuaternion(quaternionX);
     camera.position.applyQuaternion(quaternionY);
+}
+
+function panCamera(deltaX, deltaY) {
+    const right = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    camera.getWorldDirection(right).cross(up).normalize();
+
+    camera.position.addScaledVector(right, -deltaX);
+    camera.position.addScaledVector(up, deltaY);
+}
+
+function zoomCamera(delta) {
+    const zoomFactor = 1 - delta;
+    camera.position.multiplyScalar(zoomFactor);
+}
+
+export function fitCameraToScene() {
+    const boundingBox = new THREE.Box3().setFromObject(scene);
+    const center = boundingBox.getCenter(new THREE.Vector3());
+    const size = boundingBox.getSize(new THREE.Vector3());
+
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = camera.fov * (Math.PI / 180);
+    let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
+
+    cameraZ *= 1.5; // Увеличиваем расстояние, чтобы вся сцена поместилась в кадр
+
+    camera.position.set(center.x, center.y, center.z + cameraZ);
+    camera.lookAt(center);
+
+    const minZ = boundingBox.min.z;
+    const cameraToFarEdge = (minZ < 0) ? -minZ + cameraZ : cameraZ - minZ;
+
+    camera.far = cameraToFarEdge * 3;
+    camera.updateProjectionMatrix();
+
+    console.log('Камера подстроена под сцену');
+}
+
+function onWindowResize() {
+    const container = document.getElementById('viewer-container');
+    camera.aspect = container.clientWidth / container.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.clientWidth, container.clientHeight);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
+
+export function clearScene() {
+    console.log('Очистка сцены');
+    scene.traverse((object) => {
+        if (object.type === 'Mesh') {
+            object.geometry.dispose();
+            object.material.dispose();
+        }
+    });
+
+    while (scene.children.length > 0) {
+        scene.remove(scene.children[0]);
+    }
+
+    // Добавляем базовое освещение после очистки сцены
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    directionalLight.position.set(50, 50, 50);
+    scene.add(directionalLight);
+
+    console.log('Сцена очищена');
 }
 
 export async function loadIFCModel(url, fileName, onProgress) {
@@ -179,63 +268,4 @@ export async function loadIFCModel(url, fileName, onProgress) {
         console.error(`Ошибка при загрузке IFC модели ${fileName}:`, error);
         return null;
     }
-}
-
-export function fitCameraToScene() {
-    const boundingBox = new THREE.Box3().setFromObject(scene);
-    const center = boundingBox.getCenter(new THREE.Vector3());
-    const size = boundingBox.getSize(new THREE.Vector3());
-
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const fov = camera.fov * (Math.PI / 180);
-    let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
-
-    cameraZ *= 1.5; // Увеличиваем расстояние, чтобы вся сцена поместилась в кадр
-
-    camera.position.set(0, 0, 100); // Примерная установка камеры перед моделью
-    camera.lookAt(0, 0, 0);
-
-    const minZ = boundingBox.min.z;
-    const cameraToFarEdge = (minZ < 0) ? -minZ + cameraZ : cameraZ - minZ;
-
-    camera.far = cameraToFarEdge * 3;
-    camera.updateProjectionMatrix();
-
-    console.log('Камера подстроена под сцену');
-}
-
-function onWindowResize() {
-    const container = document.getElementById('viewer-container');
-    camera.aspect = container.clientWidth / container.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-    renderer.render(scene, camera);
-}
-
-export function clearScene() {
-    console.log('Очистка сцены');
-    scene.traverse((object) => {
-        if (object.type === 'Mesh') {
-            object.geometry.dispose();
-            object.material.dispose();
-        }
-    });
-
-    while (scene.children.length > 0) {
-        scene.remove(scene.children[0]);
-    }
-
-    // Добавляем базовое освещение после очистки сцены
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    directionalLight.position.set(50, 50, 50);
-    scene.add(directionalLight);
-
-    console.log('Сцена очищена');
 }
