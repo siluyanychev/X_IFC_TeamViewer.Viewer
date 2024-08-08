@@ -265,16 +265,16 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
 
     if (!viewer) {
         console.log('Viewer не инициализирован, начинаем инициализацию');
-        const viewerComponents = initViewer();
-        if (!viewerComponents) {
+        viewer = initViewer();
+        if (!viewer) {
             console.error('ОШИБКА: Не удалось инициализировать viewer');
             return;
         }
-        viewer = viewerComponents;
         console.log('Viewer успешно инициализирован');
     }
 
-    clearScene(); // Очищаем сцену перед загрузкой новых моделей
+    console.log('Очистка сцены перед загрузкой новых моделей');
+    clearScene();
 
     const progressContainer = document.getElementById('progress-container');
     const progressBar = document.getElementById('progress');
@@ -302,7 +302,6 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
 
             console.log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
             const model = await loadIFCModel(url, file.name, (progress) => {
-                // Обновляем прогресс для текущего файла
                 const fileProgress = progress * (1 / totalFiles);
                 totalProgress = (loadedFiles / totalFiles) + fileProgress;
                 const progressPercentage = Math.round(totalProgress * 100);
@@ -353,6 +352,16 @@ async function initApp() {
                 await loadIFCFiles(projectInfo.sharedLink, projectName, projectInfo.specificPath);
             }
             setupFolderStructureVisibility();
+
+            // Инициализируем viewer здесь
+            if (!viewer) {
+                viewer = initViewer();
+                if (viewer) {
+                    console.log('Viewer успешно инициализирован');
+                } else {
+                    console.error('ОШИБКА: Не удалось инициализировать viewer');
+                }
+            }
         }
     } catch (error) {
         console.error('Ошибка при инициализации приложения', error);

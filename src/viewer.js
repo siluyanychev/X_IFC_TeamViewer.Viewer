@@ -48,7 +48,6 @@ export function initViewer() {
     console.log('IFC viewer инициализирован');
     return { scene, camera, renderer, ifcLoader };
 }
-
 function setupControls() {
     const canvas = renderer.domElement;
 
@@ -218,6 +217,7 @@ function animate() {
 }
 
 export function clearScene() {
+    console.log('Очистка сцены');
     scene.traverse((object) => {
         if (object.type === 'Mesh') {
             object.geometry.dispose();
@@ -234,7 +234,8 @@ export function clearScene() {
     scene.add(ambientLight);
 
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-directionalLight.position.set(50, 50, 50); // Увеличьте интенсивность и измените позицию света
-scene.add(directionalLight);
+    directionalLight.position.set(50, 50, 50);
+    scene.add(directionalLight);
 
+    console.log('Сцена очищена');
 }
