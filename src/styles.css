@@ -40,6 +40,8 @@
 .folder, .file {
     margin: 5px 0;
     padding: 5px;
+    display: flex;
+    align-items: center;
 }
 
 .folder {
@@ -48,28 +50,28 @@
 
 .file {
     cursor: pointer;
-    transition: background-color 0.3s;
 }
 
     .file:hover {
         background-color: #e0e0e0;
     }
 
-    .file.selected {
-        background-color: #4CAF50;
-        color: white;
-    }
+.file-checkbox {
+    margin-right: 10px;
+}
 
 .folder::before {
-    content: '📁 ';
+    content: '📁';
+    margin-right: 5px;
 }
 
 .file::before {
-    content: '📄 ';
+    content: '📄';
+    margin-right: 5px;
 }
 
 .folder.open::before {
-    content: '📂 ';
+    content: '📂';
 }
 
 .toggle-button {
@@ -87,4 +89,45 @@ ul {
 h2 {
     margin-top: 0;
     color: #333;
+}
+
+#load-selected-files {
+    margin-top: 10px;
+    padding: 10px 15px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 4px;
+}
+
+    #load-selected-files:hover {
+        background-color: #45a049;
+    }
+
+#progress-container {
+    margin-top: 10px;
+    display: none;
+}
+
+#progress-bar {
+    width: 100%;
+    height: 20px;
+    background-color: #f0f0f0;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+#progress {
+    width: 0;
+    height: 100%;
+    background-color: #4CAF50;
+    transition: width 0.3s ease;
+}
+
+#progress-text {
+    margin-top: 5px;
+    text-align: center;
+    font-size: 14px;
 }

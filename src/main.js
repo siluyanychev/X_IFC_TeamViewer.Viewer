@@ -1,6 +1,6 @@
 ﻿import { msalConfig, loginRequest, log } from './config.js';
 import { PROJECT_DATA } from './projectData.js';
-import { initViewer, loadIFCModel } from './viewer.js';
+import { initViewer, loadIFCModel, clearScene, fitCameraToScene } from './viewer.js';
 
 let viewer;
 let msalInstance;
@@ -40,6 +40,7 @@ async function getFolderContents(driveId, itemId) {
     }
     return await response.json();
 }
+
 async function loadIFCFiles(sharedLink, projectName, specificPath) {
     try {
         const accessToken = await getAccessToken();
@@ -149,33 +150,90 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
                 }
             };
         } else if (item.name.toLowerCase().endsWith('.ifc')) {
-            li.onclick = () => loadSelectedIFCModels([item], driveId);
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'file-checkbox';
+            checkbox.dataset.fileId = item.id;
+            checkbox.dataset.fileName = item.name;
+            li.prepend(checkbox);
+
+            li.onclick = (event) => {
+                if (event.target !== checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                }
+                event.stopPropagation();
+                updateLoadButton();
+            };
         }
 
         ul.appendChild(li);
     });
 
     structureElement.appendChild(ul);
+
+    if (!parentElement) {
+        const loadButton = document.createElement('button');
+        loadButton.id = 'load-selected-files';
+        loadButton.textContent = 'Загрузить выбранные файлы';
+        loadButton.onclick = () => {
+            const selectedFiles = getSelectedFiles();
+            if (selectedFiles.length > 0) {
+                loadSelectedIFCModels(selectedFiles, driveId);
+            } else {
+                alert('Пожалуйста, выберите файлы для загрузки');
+            }
+        };
+        structureElement.appendChild(loadButton);
+    }
+
     log('Структура папок отображена');
 }
+
+function updateLoadButton() {
+    const selectedFiles = getSelectedFiles();
+    const loadButton = document.getElementById('load-selected-files');
+    if (loadButton) {
+        loadButton.textContent = `Загрузить выбранные файлы (${selectedFiles.length})`;
+    }
+}
+
+function getSelectedFiles() {
+    const checkboxes = document.querySelectorAll('.file-checkbox:checked');
+    return Array.from(checkboxes).map(checkbox => ({
+        id: checkbox.dataset.fileId,
+        name: checkbox.dataset.fileName
+    }));
+}
+
 async function loadSelectedIFCModels(selectedFiles, driveId) {
     log('Начало загрузки выбранных IFC моделей', { selectedFilesCount: selectedFiles.length });
 
     if (!viewer) {
         log('Viewer не инициализирован, начинаем инициализацию');
         viewer = initViewer();
+        if (!viewer) {
+            log('ОШИБКА: Не удалось инициализировать viewer');
+            return;
+        }
+        log('Viewer успешно инициализирован');
     }
 
+    clearScene(); // Очищаем сцену перед загрузкой новых моделей
+
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress');
+    const progressText = document.getElementById('progress-text');
+    progressContainer.style.display = 'block';
+
+    const totalFiles = selectedFiles.length;
+    let loadedFiles = 0;
+
     for (const file of selectedFiles) {
-        log('Загрузка IFC модели', { fileName: file.name, fileId: file.id });
+        log('Начало загрузки IFC модели', { fileName: file.name, fileId: file.id });
         try {
             const accessToken = await getAccessToken();
-            log('Токен получен для загрузки файла');
-
             const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${file.id}/content`, {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`
-                }
+                headers: { 'Authorization': `Bearer ${accessToken}` }
             });
 
             if (!response.ok) {
@@ -183,23 +241,37 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
             }
 
             const blob = await response.blob();
-            log('Файл успешно получен', { size: blob.size, type: blob.type });
-
             const url = URL.createObjectURL(blob);
-            log('URL создан для файла:', url);
 
-            await loadIFCModel(url);
-            log('IFC файл загружен в viewer');
+            log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
+            const model = await loadIFCModel(url, file.name);
+            if (model) {
+                log('IFC модель успешно загружена и добавлена на сцену', { fileName: file.name });
+            } else {
+                log('Ошибка: модель не была возвращена функцией loadIFCModel', { fileName: file.name });
+            }
 
             URL.revokeObjectURL(url);
+
+            loadedFiles++;
+            const progress = (loadedFiles / totalFiles) * 100;
+            progressBar.style.width = `${progress}%`;
+            progressText.textContent = `${Math.round(progress)}% completed`;
         } catch (error) {
             log('Ошибка при загрузке IFC модели', { error: error.message, stack: error.stack });
-            console.error('Полная ошибка:', error);
         }
     }
 
     log('Загрузка и отображение IFC моделей завершены');
+    fitCameraToScene(scene);
+
+    // Скрываем прогресс-бар после завершения загрузки
+    setTimeout(() => {
+        progressContainer.style.display = 'none';
+    }, 1000);
 }
+
+
 
 async function initApp() {
     log('DOM загружен, начало инициализации приложения');
