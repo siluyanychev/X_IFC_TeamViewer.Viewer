@@ -147,8 +147,6 @@ export async function loadIFCModel(url, fileName, onProgress) {
 
         console.log(`IFC модель загружена: ${fileName}`, model);
 
-        scene.add(model);
-
         // Перекрашивание модели на основе имени файла
         let color;
         if (fileName.startsWith('AR')) {
@@ -162,10 +160,20 @@ export async function loadIFCModel(url, fileName, onProgress) {
         if (color) {
             model.traverse((child) => {
                 if (child.isMesh) {
-                    child.material = new THREE.MeshPhongMaterial({ color: color, transparent: true, opacity: 0.7 });
+                    child.material = new THREE.MeshPhongMaterial({
+                        color: color,
+                        transparent: true,
+                        opacity: 0.7,
+                        side: THREE.DoubleSide // Рендерим обе стороны полигонов
+                    });
                 }
             });
         }
+
+        scene.add(model);
+
+        // Подгоняем камеру под новую модель
+        fitCameraToScene();
 
         return model;
     } catch (error) {
@@ -206,11 +214,26 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
-    renderer.render(scene, camera);
+    viewer.renderer.render(viewer.scene, viewer.camera);
 }
 
 export function clearScene() {
+    scene.traverse((object) => {
+        if (object.type === 'Mesh') {
+            object.geometry.dispose();
+            object.material.dispose();
+        }
+    });
+
     while (scene.children.length > 0) {
         scene.remove(scene.children[0]);
     }
+
+    // Добавляем базовое освещение после очистки сцены
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight.position.set(10, 10, 10);
+    scene.add(directionalLight);
 }

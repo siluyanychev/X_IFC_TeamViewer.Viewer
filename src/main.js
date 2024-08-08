@@ -325,7 +325,12 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
     }
 
     console.log('Загрузка и отображение IFC моделей завершены');
+
+    // Подгоняем камеру под все загруженные модели
     fitCameraToScene();
+
+    // Обновляем рендер
+    viewer.renderer.render(viewer.scene, viewer.camera);
 
     // Скрываем прогресс-бар после завершения загрузки
     setTimeout(() => {
