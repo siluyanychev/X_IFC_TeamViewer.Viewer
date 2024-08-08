@@ -257,16 +257,19 @@ function getSelectedFiles() {
 
 async function loadSelectedIFCModels(selectedFiles, driveId) {
     console.log('Начало загрузки выбранных IFC моделей', { selectedFilesCount: selectedFiles.length });
-
     if (!viewer) {
         console.log('Viewer не инициализирован, начинаем инициализацию');
-        viewer = initViewer();
-        if (!viewer) {
+        const viewerComponents = initViewer();
+        if (!viewerComponents) {
             console.error('ОШИБКА: Не удалось инициализировать viewer');
             return;
         }
+        viewer = viewerComponents;
         console.log('Viewer успешно инициализирован');
     }
+
+    // Теперь вы можете использовать компоненты viewer'а следующим образом:
+    const { scene, camera, renderer, ifcLoader } = viewer;
 
     clearScene(); // Очищаем сцену перед загрузкой новых моделей
 

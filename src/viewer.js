@@ -1,9 +1,11 @@
 ﻿import * as THREE from 'three';
 import { IFCLoader } from 'web-ifc-three/IFCLoader';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
-let scene, camera, renderer, controls;
+let scene, camera, renderer;
 let ifcLoader;
+let isDragging = false;
+let previousMousePosition = { x: 0, y: 0 };
+let currentMousePosition = { x: 0, y: 0 };
 
 export function initViewer() {
     console.log('Начало инициализации IFC viewer');
@@ -14,20 +16,18 @@ export function initViewer() {
     }
 
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xffffff);
+    scene.background = new THREE.Color(0xf0f0f0);
     console.log('Сцена создана');
 
-    camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.z = 5;
+    camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(10, 10, 10);
+    camera.lookAt(0, 0, 0);
     console.log('Камера создана');
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     container.appendChild(renderer.domElement);
     console.log('Renderer создан и добавлен в DOM');
-
-    controls = new OrbitControls(camera, renderer.domElement);
-    console.log('OrbitControls инициализированы');
 
     const light = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(light);
@@ -41,14 +41,92 @@ export function initViewer() {
     console.log('IFCLoader инициализирован');
 
     window.addEventListener('resize', onWindowResize);
+    setupControls();
 
     animate();
 
     console.log('IFC viewer инициализирован');
-    return { scene, camera, renderer, controls, ifcLoader };
+    return { scene, camera, renderer, ifcLoader };
 }
 
-// В viewer.js
+function setupControls() {
+    const canvas = renderer.domElement;
+
+    canvas.addEventListener('mousedown', onMouseDown);
+    canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('mouseup', onMouseUp);
+    canvas.addEventListener('wheel', onMouseWheel);
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+}
+
+function onMouseDown(event) {
+    isDragging = true;
+    previousMousePosition = { x: event.clientX, y: event.clientY };
+}
+
+function onMouseMove(event) {
+    currentMousePosition = { x: event.clientX, y: event.clientY };
+
+    if (isDragging) {
+        const deltaMove = {
+            x: currentMousePosition.x - previousMousePosition.x,
+            y: currentMousePosition.y - previousMousePosition.y
+        };
+
+        if (event.buttons === 1) { // Left mouse button
+            if (event.shiftKey) {
+                // Pan
+                const speed = 0.05;
+                camera.position.x -= deltaMove.x * speed;
+                camera.position.y += deltaMove.y * speed;
+            } else {
+                // Orbit
+                const speed = 0.01;
+                rotateCamera(deltaMove.x * speed, deltaMove.y * speed);
+            }
+        } else if (event.buttons === 4) { // Middle mouse button
+            // Pan
+            const speed = 0.05;
+            camera.position.x -= deltaMove.x * speed;
+            camera.position.y += deltaMove.y * speed;
+        }
+    }
+
+    previousMousePosition = { x: currentMousePosition.x, y: currentMousePosition.y };
+}
+
+function onMouseUp() {
+    isDragging = false;
+}
+
+function onMouseWheel(event) {
+    const zoomSpeed = 0.1;
+    const zoomFactor = event.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
+    camera.position.multiplyScalar(zoomFactor);
+}
+
+function onKeyDown(event) {
+    if (event.key === 'f' || event.key === 'F') {
+        fitCameraToScene();
+    }
+}
+
+function onKeyUp(event) {
+    // Можно добавить дополнительные действия при отпускании клавиш
+}
+
+function rotateCamera(angleX, angleY) {
+    const quaternionX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angleX);
+    const quaternionY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), angleY);
+
+    camera.quaternion.premultiply(quaternionX);
+    camera.quaternion.premultiply(quaternionY);
+    camera.position.applyQuaternion(quaternionX);
+    camera.position.applyQuaternion(quaternionY);
+}
+
 export async function loadIFCModel(url, fileName) {
     console.log(`Начало загрузки IFC модели: ${fileName}`);
     try {
@@ -92,28 +170,27 @@ export async function loadIFCModel(url, fileName) {
     }
 }
 
-
-
-export function fitCameraToScene(object, offset = 1.5) {
-    const boundingBox = new THREE.Box3().setFromObject(object);
+export function fitCameraToScene() {
+    const boundingBox = new THREE.Box3().setFromObject(scene);
     const center = boundingBox.getCenter(new THREE.Vector3());
     const size = boundingBox.getSize(new THREE.Vector3());
+
     const maxDim = Math.max(size.x, size.y, size.z);
     const fov = camera.fov * (Math.PI / 180);
     let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
-    cameraZ *= offset;
-    camera.position.z = cameraZ;
+
+    cameraZ *= 1.5; // Увеличиваем расстояние, чтобы вся сцена поместилась в кадр
+
+    camera.position.set(center.x, center.y, center.z + cameraZ);
+    camera.lookAt(center);
+
     const minZ = boundingBox.min.z;
     const cameraToFarEdge = (minZ < 0) ? -minZ + cameraZ : cameraZ - minZ;
+
     camera.far = cameraToFarEdge * 3;
     camera.updateProjectionMatrix();
-    if (controls) {
-        controls.target = center;
-        controls.maxDistance = cameraToFarEdge * 2;
-    }
-    camera.position.x = center.x;
-    camera.position.y = center.y + (size.y / 2);
-    camera.lookAt(center);
+
+    console.log('Камера подстроена под сцену');
 }
 
 function onWindowResize() {
@@ -125,7 +202,6 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
-    controls.update();
     renderer.render(scene, camera);
 }
 
