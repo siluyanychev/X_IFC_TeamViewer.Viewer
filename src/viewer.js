@@ -169,7 +169,7 @@ export async function loadIFCModel(url, fileName, onProgress) {
                 }
             });
         }
-
+        model.scale.set(0.1, 0.1, 0.1); // Пример уменьшения модели
         scene.add(model);
 
         // Подгоняем камеру под новую модель
@@ -193,8 +193,8 @@ export function fitCameraToScene() {
 
     cameraZ *= 1.5; // Увеличиваем расстояние, чтобы вся сцена поместилась в кадр
 
-    camera.position.set(center.x, center.y, center.z + cameraZ);
-    camera.lookAt(center);
+    camera.position.set(0, 0, 100); // Примерная установка камеры перед моделью
+    camera.lookAt(0, 0, 0);
 
     const minZ = boundingBox.min.z;
     const cameraToFarEdge = (minZ < 0) ? -minZ + cameraZ : cameraZ - minZ;
@@ -233,7 +233,8 @@ export function clearScene() {
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    directionalLight.position.set(10, 10, 10);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    directionalLight.position.set(50, 50, 50); // Увеличьте интенсивность и измените позицию света
     scene.add(directionalLight);
+
 }
