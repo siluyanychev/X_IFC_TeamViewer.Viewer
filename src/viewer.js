@@ -15,20 +15,24 @@ export function initViewer() {
         return null;
     }
 
+    // Инициализация сцены
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf0f0f0);
     console.log('Сцена создана');
 
+    // Инициализация камеры
     camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
     camera.position.set(10, 10, 10);
     camera.lookAt(0, 0, 0);
     console.log('Камера создана');
 
+    // Инициализация рендерера
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     container.appendChild(renderer.domElement);
     console.log('Renderer создан и добавлен в DOM');
 
+    // Настройка освещения
     const light = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(light);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
@@ -36,36 +40,44 @@ export function initViewer() {
     scene.add(directionalLight);
     console.log('Освещение добавлено');
 
+    // Инициализация загрузчика IFC
     ifcLoader = new IFCLoader();
     ifcLoader.ifcManager.setWasmPath('/web-ifc/');
     console.log('IFCLoader инициализирован');
 
+    // Настройка событий
     window.addEventListener('resize', onWindowResize);
     setupControls();
 
+    // Запуск анимации
     animate();
 
     console.log('IFC viewer инициализирован');
     return { scene, camera, renderer, ifcLoader };
 }
 
+// Настройка управления камерой и событиями мыши
 function setupControls() {
     const canvas = renderer.domElement;
 
+    // Обработчики событий мыши
     canvas.addEventListener('mousedown', onMouseDown);
     canvas.addEventListener('mousemove', onMouseMove);
     canvas.addEventListener('mouseup', onMouseUp);
     canvas.addEventListener('wheel', onMouseWheel);
 
+    // Обработчики событий клавиатуры
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 }
 
+// Обработчик нажатия мыши
 function onMouseDown(event) {
     isDragging = true;
     previousMousePosition = { x: event.clientX, y: event.clientY };
 }
 
+// Обработчик движения мыши
 function onMouseMove(event) {
     currentMousePosition = { x: event.clientX, y: event.clientY };
 
@@ -75,48 +87,36 @@ function onMouseMove(event) {
             y: currentMousePosition.y - previousMousePosition.y
         };
 
-        if (event.buttons === 1) { // Left mouse button
+        if (event.buttons === 4) { // Средняя кнопка мыши
             if (event.shiftKey) {
-                // Pan
-                const speed = 0.05;
-                camera.position.x -= deltaMove.x * speed;
-                camera.position.y += deltaMove.y * speed;
+                // Панорамирование (Pan)
+                const panSpeed = 0.005;
+                camera.position.x -= deltaMove.x * panSpeed;
+                camera.position.y += deltaMove.y * panSpeed;
             } else {
-                // Orbit
-                const speed = 0.01;
-                rotateCamera(deltaMove.x * speed, deltaMove.y * speed);
+                // Вращение (Orbit)
+                const rotateSpeed = 0.005;
+                rotateCamera(deltaMove.x * rotateSpeed, deltaMove.y * rotateSpeed);
             }
-        } else if (event.buttons === 4) { // Middle mouse button
-            // Pan
-            const speed = 0.05;
-            camera.position.x -= deltaMove.x * speed;
-            camera.position.y += deltaMove.y * speed;
         }
     }
 
     previousMousePosition = { x: currentMousePosition.x, y: currentMousePosition.y };
 }
 
+// Обработчик отпускания мыши
 function onMouseUp() {
     isDragging = false;
 }
 
+// Обработчик колеса мыши (для зума)
 function onMouseWheel(event) {
-    const zoomSpeed = 0.1;
-    const zoomFactor = event.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
+    const zoomSpeed = 1.05;
+    const zoomFactor = event.deltaY > 0 ? zoomSpeed : 1 / zoomSpeed;
     camera.position.multiplyScalar(zoomFactor);
 }
 
-function onKeyDown(event) {
-    if (event.key === 'f' || event.key === 'F') {
-        fitCameraToScene();
-    }
-}
-
-function onKeyUp(event) {
-    // Можно добавить дополнительные действия при отпускании клавиш
-}
-
+// Вращение камеры
 function rotateCamera(angleX, angleY) {
     const quaternionX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angleX);
     const quaternionY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), angleY);
@@ -127,74 +127,17 @@ function rotateCamera(angleX, angleY) {
     camera.position.applyQuaternion(quaternionY);
 }
 
-export async function loadIFCModel(url, fileName, onProgress) {
-    console.log(`Начало загрузки IFC модели: ${fileName}`);
-    try {
-        const model = await new Promise((resolve, reject) => {
-            ifcLoader.load(
-                url,
-                (model) => resolve(model),
-                (progress) => {
-                    const percentage = progress.loaded / progress.total;
-                    console.log(`Загрузка ${fileName}: ${Math.round(percentage * 100)}%`);
-                    if (onProgress) {
-                        onProgress(percentage);
-                    }
-                },
-                (error) => reject(error)
-            );
-        });
-
-        console.log(`IFC модель загружена: ${fileName}`, model);
-
-        // Перекрашивание модели на основе имени файла
-        let color;
-        if (fileName.startsWith('AR')) {
-            color = new THREE.Color(0xFFA500); // Оранжевый
-        } else if (fileName.startsWith('HV')) {
-            color = new THREE.Color(0x0000FF); // Синий
-        } else if (fileName.startsWith('TS')) {
-            color = new THREE.Color(0x8A2BE2); // Фиолетовый
-        }
-
-        if (color) {
-            model.traverse((child) => {
-                if (child.isMesh) {
-                    child.material = new THREE.MeshPhongMaterial({
-                        color: color,
-                        transparent: true,
-                        opacity: 0.7,
-                        side: THREE.DoubleSide // Рендерим обе стороны полигонов
-                    });
-                }
-            });
-        }
-        model.scale.set(0.1, 0.1, 0.1); // Пример уменьшения модели
-        scene.add(model);
-
-        // Подгоняем камеру под новую модель
-        fitCameraToScene();
-
-        return model;
-    } catch (error) {
-        console.error(`Ошибка при загрузке IFC модели ${fileName}:`, error);
-        return null;
-    }
-}
-
-export function fitCameraToScene() {
+// Подгонка камеры под сцену
+function fitCameraToScene() {
     const boundingBox = new THREE.Box3().setFromObject(scene);
     const center = boundingBox.getCenter(new THREE.Vector3());
     const size = boundingBox.getSize(new THREE.Vector3());
 
     const maxDim = Math.max(size.x, size.y, size.z);
     const fov = camera.fov * (Math.PI / 180);
-    let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
-
-    cameraZ *= 1.5; // Увеличиваем расстояние, чтобы вся сцена поместилась в кадр
-
-    camera.position.set(0, 0, 100); // Примерная установка камеры перед моделью
-    camera.lookAt(0, 0, 0);
+    let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2)); // расстояние до объекта по оси Z
+    cameraZ *= 1.5; // увеличение расстояния для предотвращения обрезки
+    camera.position.z = center.z + cameraZ;
 
     const minZ = boundingBox.min.z;
     const cameraToFarEdge = (minZ < 0) ? -minZ + cameraZ : cameraZ - minZ;
@@ -202,9 +145,12 @@ export function fitCameraToScene() {
     camera.far = cameraToFarEdge * 3;
     camera.updateProjectionMatrix();
 
-    console.log('Камера подстроена под сцену');
+    if (camera.position.length() < 1) {
+        camera.position.set(10, 10, 10);
+    }
+    camera.lookAt(center);
 }
-
+// Обработчик изменения размера окна
 function onWindowResize() {
     const container = document.getElementById('viewer-container');
     camera.aspect = container.clientWidth / container.clientHeight;
@@ -212,29 +158,33 @@ function onWindowResize() {
     renderer.setSize(container.clientWidth, container.clientHeight);
 }
 
+// Анимация и рендеринг сцены
 function animate() {
     requestAnimationFrame(animate);
     renderer.render(scene, camera);
 }
 
-export function clearScene() {
-    scene.traverse((object) => {
-        if (object.type === 'Mesh') {
-            object.geometry.dispose();
-            object.material.dispose();
-        }
-    });
-
-    while (scene.children.length > 0) {
-        scene.remove(scene.children[0]);
+// Обработчик событий клавиатуры (можно расширить по необходимости)
+function onKeyDown(event) {
+    switch (event.key) {
+        case 'w': // Example: Move forward
+            camera.position.z -= 0.1;
+            break;
+        case 's': // Example: Move backward
+            camera.position.z += 0.1;
+            break;
+        // Добавьте больше кейсов для других действий
     }
+}
 
-    // Добавляем базовое освещение после очистки сцены
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(ambientLight);
+function onKeyUp(event) {
+    // Обработка отпускания клавиш (можно расширить по необходимости)
+}
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    directionalLight.position.set(50, 50, 50); // Увеличьте интенсивность и измените позицию света
-    scene.add(directionalLight);
-
+// Экспорт функции загрузки IFC модели
+export function loadIfcModel(url) {
+    ifcLoader.load(url, (ifcModel) => {
+        scene.add(ifcModel.mesh);
+        fitCameraToScene();
+    });
 }
