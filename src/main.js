@@ -35,14 +35,19 @@ async function getAccessToken() {
 }
 
 async function getFolderContents(driveId, folderId) {
-    const accessToken = await getAccessToken();
-    const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderId}/children`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-    });
-    if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+    try {
+        const accessToken = await getAccessToken();
+        const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderId}/children`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Ошибка при получении содержимого папки:', error);
+        return { value: [] }; // Возвращаем пустой массив в случае ошибки
     }
-    return await response.json();
 }
 
 async function loadIFCFiles(sharedLink, projectName, specificPath) {
@@ -287,16 +292,24 @@ async function loadSelectedModels(selectedFiles, driveId) {
 
     let allFiles = [];
     try {
-        if (selectedFiles[0] && selectedFiles[0].parentReference && selectedFiles[0].parentReference.id) {
-            log('Получение содержимого папки');
-            const folderContents = await getFolderContents(driveId, selectedFiles[0].parentReference.id);
-            allFiles = folderContents.value;
-            log('Содержимое папки получено', { filesCount: allFiles.length });
+        if (selectedFiles.length > 0) {
+            log('Информация о первом выбранном файле:', selectedFiles[0]);
+            if (selectedFiles[0].parentReference && selectedFiles[0].parentReference.id) {
+                log('Получение содержимого папки');
+                const folderContents = await getFolderContents(driveId, selectedFiles[0].parentReference.id);
+                allFiles = folderContents.value;
+                log('Содержимое папки получено', { filesCount: allFiles.length });
+            } else {
+                log('Предупреждение: Невозможно получить содержимое папки, используем только выбранные файлы');
+                allFiles = selectedFiles;
+            }
         } else {
-            log('Невозможно получить содержимое папки: отсутствует информация о родительской папке');
+            log('Предупреждение: Нет выбранных файлов');
         }
     } catch (error) {
         console.error('Ошибка при получении содержимого папки:', error);
+        // Используем выбранные файлы в качестве резервного варианта
+        allFiles = selectedFiles;
     }
 
     for (const file of selectedFiles) {
