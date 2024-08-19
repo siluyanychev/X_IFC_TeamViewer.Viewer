@@ -316,7 +316,7 @@ async function loadSelectedModels(selectedFiles, driveId, allFiles) {
 
             console.log('Файл получен, начинаем загрузку в viewer', { fileName: file.name, url });
 
-            let binUrl;
+            let binBlob;
             if (file.name.toLowerCase().endsWith('.gltf')) {
                 console.log('Обнаружен glTF файл, ищем соответствующий .bin файл');
                 const binFileName = file.name.replace('.gltf', '.bin');
@@ -329,9 +329,8 @@ async function loadSelectedModels(selectedFiles, driveId, allFiles) {
                         headers: { 'Authorization': `Bearer ${accessToken}` }
                     });
                     if (binResponse.ok) {
-                        const binBlob = await binResponse.blob();
-                        binUrl = URL.createObjectURL(binBlob);
-                        console.log(`Соответствующий .bin файл загружен: ${binFileName}`, { binUrl });
+                        binBlob = await binResponse.blob();
+                        console.log(`Соответствующий .bin файл загружен: ${binFileName}`);
                     } else {
                         console.log(`Ошибка при получении .bin файла: ${binResponse.statusText}`);
                     }
@@ -340,7 +339,7 @@ async function loadSelectedModels(selectedFiles, driveId, allFiles) {
                 }
             }
 
-            console.log('Вызов функции loadModel', { fileName: file.name, url, binUrl });
+            console.log('Вызов функции loadModel', { fileName: file.name, url, hasBinBlob: !!binBlob });
             const model = await loadModel(url, file.name, (progress) => {
                 const fileProgress = progress * (1 / totalFiles);
                 totalProgress = (loadedFiles / totalFiles) + fileProgress;
@@ -348,7 +347,7 @@ async function loadSelectedModels(selectedFiles, driveId, allFiles) {
                 progressBar.style.width = `${progressPercentage}%`;
                 progressText.textContent = `${progressPercentage}% completed`;
                 console.log('Прогресс загрузки', { fileName: file.name, progress: progressPercentage });
-            }, binUrl);
+            }, binBlob);
 
             if (model) {
                 console.log('Модель успешно загружена и добавлена на сцену', { fileName: file.name });
@@ -357,7 +356,6 @@ async function loadSelectedModels(selectedFiles, driveId, allFiles) {
             }
 
             URL.revokeObjectURL(url);
-            if (binUrl) URL.revokeObjectURL(binUrl);
 
             loadedFiles++;
             console.log('Файл обработан', { fileName: file.name, loadedFiles, totalFiles });

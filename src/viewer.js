@@ -92,14 +92,14 @@ export function clearScene() {
     console.log('Сцена очищена');
 }
 
-export async function loadModel(url, fileName, onProgress) {
+export async function loadModel(url, fileName, onProgress, binBlob) {
     console.log(`Начало загрузки модели: ${fileName}`);
     try {
         let model;
         if (fileName.toLowerCase().endsWith('.ifc')) {
             model = await loadIFCModel(url, fileName, onProgress);
         } else if (fileName.toLowerCase().endsWith('.gltf') || fileName.toLowerCase().endsWith('.glb')) {
-            model = await loadGLTFModel(url, fileName, onProgress);
+            model = await loadGLTFModel(url, fileName, onProgress, binBlob);
         } else {
             throw new Error('Неподдерживаемый формат файла');
         }
@@ -172,10 +172,11 @@ export async function loadIFCModel(url, fileName, onProgress) {
         return null;
     }
 }
-async function loadGLTFModel(url, fileName, onProgress, binUrl) {
+async function loadGLTFModel(url, fileName, onProgress, binBlob) {
     console.log(`Начало загрузки GLTF модели: ${fileName}`);
     return new Promise((resolve, reject) => {
-        gltfLoader.load(
+        const loader = new GLTFLoader();
+        loader.load(
             url,
             (gltf) => {
                 const model = gltf.scene;
@@ -192,15 +193,17 @@ async function loadGLTFModel(url, fileName, onProgress, binUrl) {
             (error) => {
                 console.error(`Ошибка при загрузке GLTF модели ${fileName}:`, error);
                 reject(error);
-            },
-            (path) => {
-                if (path.endsWith('.bin') && binUrl) {
-                    console.log(`Загрузка .bin файла: ${binUrl}`);
-                    return binUrl;
-                }
-                return path;
             }
         );
+
+        // Переопределяем метод загрузки файлов для GLTFLoader
+        loader.setResourcePath((resource) => {
+            if (resource.endsWith('.bin') && binBlob) {
+                console.log('Использование предзагруженного .bin файла');
+                return URL.createObjectURL(binBlob);
+            }
+            return resource;
+        });
     });
 }
 
