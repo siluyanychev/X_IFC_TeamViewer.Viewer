@@ -34,9 +34,9 @@ async function getAccessToken() {
     }
 }
 
-async function getFolderContents(driveId, itemId) {
+async function getFolderContents(driveId, folderId) {
     const accessToken = await getAccessToken();
-    const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/children`, {
+    const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderId}/children`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
     });
     if (!response.ok) {
@@ -285,6 +285,10 @@ async function loadSelectedModels(selectedFiles, driveId) {
     let loadedFiles = 0;
     let totalProgress = 0;
 
+    // Получаем список всех файлов в текущей папке
+    const folderContents = await getFolderContents(driveId, selectedFiles[0].parentReference.id);
+    const allFiles = folderContents.value;
+
     for (const file of selectedFiles) {
         log('Начало загрузки модели', { fileName: file.name, fileId: file.id });
         try {
@@ -305,7 +309,7 @@ async function loadSelectedModels(selectedFiles, driveId) {
             let binUrl;
             if (file.name.toLowerCase().endsWith('.gltf')) {
                 const binFileName = file.name.replace('.gltf', '.bin');
-                const binFile = selectedFiles.find(f => f.name === binFileName);
+                const binFile = allFiles.find(f => f.name === binFileName);
                 if (binFile) {
                     const binResponse = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${binFile.id}/content`, {
                         headers: { 'Authorization': `Bearer ${accessToken}` }
@@ -313,11 +317,12 @@ async function loadSelectedModels(selectedFiles, driveId) {
                     if (binResponse.ok) {
                         const binBlob = await binResponse.blob();
                         binUrl = URL.createObjectURL(binBlob);
+                        log(`Соответствующий .bin файл найден и загружен: ${binFileName}`);
                     } else {
-                        throw new Error(`Ошибка при получении .bin файла: ${binResponse.statusText}`);
+                        log(`Предупреждение: Ошибка при загрузке .bin файла: ${binResponse.statusText}`);
                     }
                 } else {
-                    throw new Error(`Не найден соответствующий .bin файл для ${file.name}`);
+                    log(`Предупреждение: Не найден соответствующий .bin файл для ${file.name}`);
                 }
             }
 
