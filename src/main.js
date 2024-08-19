@@ -285,9 +285,19 @@ async function loadSelectedModels(selectedFiles, driveId) {
     let loadedFiles = 0;
     let totalProgress = 0;
 
-    // Получаем список всех файлов в текущей папке
-    const folderContents = await getFolderContents(driveId, selectedFiles[0].parentReference.id);
-    const allFiles = folderContents.value;
+    let allFiles = [];
+    try {
+        if (selectedFiles[0] && selectedFiles[0].parentReference && selectedFiles[0].parentReference.id) {
+            log('Получение содержимого папки');
+            const folderContents = await getFolderContents(driveId, selectedFiles[0].parentReference.id);
+            allFiles = folderContents.value;
+            log('Содержимое папки получено', { filesCount: allFiles.length });
+        } else {
+            log('Невозможно получить содержимое папки: отсутствует информация о родительской папке');
+        }
+    } catch (error) {
+        console.error('Ошибка при получении содержимого папки:', error);
+    }
 
     for (const file of selectedFiles) {
         log('Начало загрузки модели', { fileName: file.name, fileId: file.id });
