@@ -173,9 +173,35 @@ export async function loadIFCModel(url, fileName, onProgress) {
     }
 }
 async function loadGLTFModel(url, fileName, onProgress) {
+    const gltfLoader = new GLTFLoader();
+
+    // Загружаем .gltf файл
+    const gltfResponse = await fetch(url);
+    const gltfBlob = await gltfResponse.blob();
+    const gltfText = await gltfBlob.text();
+    const gltfJson = JSON.parse(gltfText);
+
+    // Получаем имя .bin файла из .gltf
+    const binFileName = gltfJson.buffers[0].uri;
+
+    // Загружаем .bin файл
+    const binUrl = url.replace(fileName, binFileName);
+    const binResponse = await fetch(binUrl);
+    const binBlob = await binResponse.blob();
+
+    // Создаем объект File для .gltf и .bin
+    const gltfFile = new File([gltfBlob], fileName, { type: 'model/gltf+json' });
+    const binFile = new File([binBlob], binFileName, { type: 'application/octet-stream' });
+
+    // Создаем объект для хранения файлов
+    const files = {
+        [fileName]: gltfFile,
+        [binFileName]: binFile
+    };
+
     return new Promise((resolve, reject) => {
         gltfLoader.load(
-            url,
+            URL.createObjectURL(gltfFile),
             (gltf) => {
                 const model = gltf.scene;
                 applyMaterialToModel(model, fileName);
@@ -188,7 +214,14 @@ async function loadGLTFModel(url, fileName, onProgress) {
                     onProgress(percentage);
                 }
             },
-            (error) => reject(error)
+            (error) => reject(error),
+            (path, loader) => {
+                const file = files[path] || files[path.replace('./', '')];
+                if (file) {
+                    return URL.createObjectURL(file);
+                }
+                return path;
+            }
         );
     });
 }

@@ -301,18 +301,52 @@ async function loadSelectedModels(selectedFiles, driveId) {
             const url = URL.createObjectURL(blob);
 
             log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
-            const model = await loadModel(url, file.name, (progress) => {
-                const fileProgress = progress * (1 / totalFiles);
-                totalProgress = (loadedFiles / totalFiles) + fileProgress;
-                const progressPercentage = Math.round(totalProgress * 100);
-                progressBar.style.width = `${progressPercentage}%`;
-                progressText.textContent = `${progressPercentage}% completed`;
-            });
 
-            if (model) {
-                log('Модель успешно загружена и добавлена на сцену', { fileName: file.name });
+            // Если это glTF файл, загружаем также .bin файл
+            if (file.name.toLowerCase().endsWith('.gltf')) {
+                const binFileName = file.name.replace('.gltf', '.bin');
+                const binFile = selectedFiles.find(f => f.name === binFileName);
+                if (binFile) {
+                    const binResponse = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${binFile.id}/content`, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    });
+                    if (binResponse.ok) {
+                        const binBlob = await binResponse.blob();
+                        const binUrl = URL.createObjectURL(binBlob);
+                        // Передаем оба URL в функцию loadModel
+                        const model = await loadModel(url, file.name, (progress) => {
+                            const fileProgress = progress * (1 / totalFiles);
+                            totalProgress = (loadedFiles / totalFiles) + fileProgress;
+                            const progressPercentage = Math.round(totalProgress * 100);
+                            progressBar.style.width = `${progressPercentage}%`;
+                            progressText.textContent = `${progressPercentage}% completed`;
+                        }, binUrl);
+                        if (model) {
+                            log('Модель успешно загружена и добавлена на сцену', { fileName: file.name });
+                        } else {
+                            console.error('Ошибка: модель не была возвращена функцией loadModel', { fileName: file.name });
+                        }
+                        URL.revokeObjectURL(binUrl);
+                    } else {
+                        throw new Error(`Ошибка при получении .bin файла: ${binResponse.statusText}`);
+                    }
+                } else {
+                    throw new Error(`Не найден соответствующий .bin файл для ${file.name}`);
+                }
             } else {
-                console.error('Ошибка: модель не была возвращена функцией loadModel', { fileName: file.name });
+                // Для не-glTF файлов оставляем как есть
+                const model = await loadModel(url, file.name, (progress) => {
+                    const fileProgress = progress * (1 / totalFiles);
+                    totalProgress = (loadedFiles / totalFiles) + fileProgress;
+                    const progressPercentage = Math.round(totalProgress * 100);
+                    progressBar.style.width = `${progressPercentage}%`;
+                    progressText.textContent = `${progressPercentage}% completed`;
+                });
+                if (model) {
+                    log('Модель успешно загружена и добавлена на сцену', { fileName: file.name });
+                } else {
+                    console.error('Ошибка: модель не была возвращена функцией loadModel', { fileName: file.name });
+                }
             }
 
             URL.revokeObjectURL(url);
