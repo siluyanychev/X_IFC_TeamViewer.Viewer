@@ -312,33 +312,29 @@ async function loadSelectedModels(selectedFiles, driveId) {
                 const binFileName = file.name.replace('.gltf', '.bin');
                 console.log('Ожидаемое имя .bin файла:', binFileName);
 
-                if (file.parentReference && file.parentReference.id) {
-                    console.log('Получаем содержимое родительской папки', { parentId: file.parentReference.id });
-                    const folderContents = await getFolderContents(driveId, file.parentReference.id);
-                    console.log('Содержимое родительской папки:', folderContents);
+                // Пытаемся найти .bin файл в том же каталоге
+                const folderContents = await getFolderContents(driveId, file.parentReference?.id || '');
+                console.log('Содержимое папки:', folderContents);
 
-                    if (folderContents && folderContents.value) {
-                        const binFile = folderContents.value.find(item => item.name === binFileName);
-                        if (binFile) {
-                            console.log('Найден соответствующий .bin файл', binFile);
-                            const binResponse = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${binFile.id}/content`, {
-                                headers: { 'Authorization': `Bearer ${accessToken}` }
-                            });
-                            if (binResponse.ok) {
-                                const binBlob = await binResponse.blob();
-                                binUrl = URL.createObjectURL(binBlob);
-                                console.log(`Соответствующий .bin файл загружен: ${binFileName}`, { binUrl });
-                            } else {
-                                console.log(`Ошибка при получении .bin файла: ${binResponse.statusText}`);
-                            }
+                if (folderContents && folderContents.value) {
+                    const binFile = folderContents.value.find(item => item.name === binFileName);
+                    if (binFile) {
+                        console.log('Найден соответствующий .bin файл', binFile);
+                        const binResponse = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${binFile.id}/content`, {
+                            headers: { 'Authorization': `Bearer ${accessToken}` }
+                        });
+                        if (binResponse.ok) {
+                            const binBlob = await binResponse.blob();
+                            binUrl = URL.createObjectURL(binBlob);
+                            console.log(`Соответствующий .bin файл загружен: ${binFileName}`, { binUrl });
                         } else {
-                            console.log(`Предупреждение: Не найден соответствующий .bin файл для ${file.name}`);
+                            console.log(`Ошибка при получении .bin файла: ${binResponse.statusText}`);
                         }
                     } else {
-                        console.log(`Не удалось получить содержимое папки для файла ${file.name}`);
+                        console.log(`Предупреждение: Не найден соответствующий .bin файл для ${file.name}`);
                     }
                 } else {
-                    console.log('Не удалось получить информацию о родительской папке', file.parentReference);
+                    console.log(`Не удалось получить содержимое папки для файла ${file.name}`);
                 }
             }
 
