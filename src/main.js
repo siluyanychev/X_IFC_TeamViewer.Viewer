@@ -261,19 +261,19 @@ function getSelectedFiles() {
 }
 
 async function loadSelectedModels(selectedFiles, driveId) {
-    log('Начало загрузки выбранных моделей', { selectedFilesCount: selectedFiles.length });
+    console.log('Начало загрузки выбранных моделей', { selectedFilesCount: selectedFiles.length, driveId });
 
     if (!viewer) {
-        log('Viewer не инициализирован, начинаем инициализацию');
+        console.log('Viewer не инициализирован, начинаем инициализацию');
         viewer = initViewer();
         if (!viewer) {
             console.error('ОШИБКА: Не удалось инициализировать viewer');
             return;
         }
-        log('Viewer успешно инициализирован');
+        console.log('Viewer успешно инициализирован', viewer);
     }
 
-    log('Очистка сцены перед загрузкой новых моделей');
+    console.log('Очистка сцены перед загрузкой новых моделей');
     clearScene();
 
     const progressContainer = document.getElementById('progress-container');
@@ -286,9 +286,13 @@ async function loadSelectedModels(selectedFiles, driveId) {
     let totalProgress = 0;
 
     for (const file of selectedFiles) {
-        log('Начало загрузки модели', { fileName: file.name, fileId: file.id });
+        console.log('Начало загрузки модели', { fileName: file.name, fileId: file.id });
+        console.log('Полная информация о файле:', JSON.stringify(file, null, 2));
+
         try {
             const accessToken = await getAccessToken();
+            console.log('Получен токен доступа');
+
             const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${file.id}/content`, {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             });
@@ -300,40 +304,56 @@ async function loadSelectedModels(selectedFiles, driveId) {
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);
 
-            log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
+            console.log('Файл получен, начинаем загрузку в viewer', { fileName: file.name, url });
 
             let binUrl;
             if (file.name.toLowerCase().endsWith('.gltf')) {
+                console.log('Обнаружен glTF файл, ищем соответствующий .bin файл');
                 const binFileName = file.name.replace('.gltf', '.bin');
-                const folderContents = await getFolderContents(driveId, file.parentReference.id);
-                const binFile = folderContents.value.find(item => item.name === binFileName);
+                console.log('Ожидаемое имя .bin файла:', binFileName);
 
-                if (binFile) {
-                    const binResponse = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${binFile.id}/content`, {
-                        headers: { 'Authorization': `Bearer ${accessToken}` }
-                    });
-                    if (binResponse.ok) {
-                        const binBlob = await binResponse.blob();
-                        binUrl = URL.createObjectURL(binBlob);
-                        log(`Соответствующий .bin файл найден и загружен: ${binFileName}`);
+                if (file.parentReference && file.parentReference.id) {
+                    console.log('Получаем содержимое родительской папки', { parentId: file.parentReference.id });
+                    const folderContents = await getFolderContents(driveId, file.parentReference.id);
+                    console.log('Содержимое родительской папки:', folderContents);
+
+                    if (folderContents && folderContents.value) {
+                        const binFile = folderContents.value.find(item => item.name === binFileName);
+                        if (binFile) {
+                            console.log('Найден соответствующий .bin файл', binFile);
+                            const binResponse = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${binFile.id}/content`, {
+                                headers: { 'Authorization': `Bearer ${accessToken}` }
+                            });
+                            if (binResponse.ok) {
+                                const binBlob = await binResponse.blob();
+                                binUrl = URL.createObjectURL(binBlob);
+                                console.log(`Соответствующий .bin файл загружен: ${binFileName}`, { binUrl });
+                            } else {
+                                console.log(`Ошибка при получении .bin файла: ${binResponse.statusText}`);
+                            }
+                        } else {
+                            console.log(`Предупреждение: Не найден соответствующий .bin файл для ${file.name}`);
+                        }
                     } else {
-                        log(`Ошибка при получении .bin файла: ${binResponse.statusText}`);
+                        console.log(`Не удалось получить содержимое папки для файла ${file.name}`);
                     }
                 } else {
-                    log(`Предупреждение: Не найден соответствующий .bin файл для ${file.name}`);
+                    console.log('Не удалось получить информацию о родительской папке', file.parentReference);
                 }
             }
 
+            console.log('Вызов функции loadModel', { fileName: file.name, url, binUrl });
             const model = await loadModel(url, file.name, (progress) => {
                 const fileProgress = progress * (1 / totalFiles);
                 totalProgress = (loadedFiles / totalFiles) + fileProgress;
                 const progressPercentage = Math.round(totalProgress * 100);
                 progressBar.style.width = `${progressPercentage}%`;
                 progressText.textContent = `${progressPercentage}% completed`;
+                console.log('Прогресс загрузки', { fileName: file.name, progress: progressPercentage });
             }, binUrl);
 
             if (model) {
-                log('Модель успешно загружена и добавлена на сцену', { fileName: file.name });
+                console.log('Модель успешно загружена и добавлена на сцену', { fileName: file.name });
             } else {
                 console.error('Ошибка: модель не была возвращена функцией loadModel', { fileName: file.name });
             }
@@ -342,12 +362,13 @@ async function loadSelectedModels(selectedFiles, driveId) {
             if (binUrl) URL.revokeObjectURL(binUrl);
 
             loadedFiles++;
+            console.log('Файл обработан', { fileName: file.name, loadedFiles, totalFiles });
         } catch (error) {
-            console.error('Ошибка при загрузке модели', { error: error.message, stack: error.stack });
+            console.error('Ошибка при загрузке модели', { fileName: file.name, error: error.message, stack: error.stack });
         }
     }
 
-    log('Загрузка и отображение моделей завершены');
+    console.log('Загрузка и отображение моделей завершены');
     fitCameraToScene();
 
     debugScene();
@@ -356,7 +377,6 @@ async function loadSelectedModels(selectedFiles, driveId) {
         progressContainer.style.display = 'none';
     }, 1000);
 }
-
 async function initApp() {
     log('DOM загружен, начало инициализации приложения');
     try {
