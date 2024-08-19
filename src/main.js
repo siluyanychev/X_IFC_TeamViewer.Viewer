@@ -269,16 +269,14 @@ async function loadSelectedModels(selectedFiles, driveId) {
     console.log('Начало загрузки выбранных моделей', { selectedFilesCount: selectedFiles.length });
 
     if (!viewer) {
-        console.log('Viewer не инициализирован, начинаем инициализацию');
+        console.log('Инициализация viewer');
         viewer = initViewer();
         if (!viewer) {
-            console.error('ОШИБКА: Не удалось инициализировать viewer');
+            console.error('Ошибка инициализации viewer');
             return;
         }
-        console.log('Viewer успешно инициализирован');
     }
 
-    console.log('Очистка сцены перед загрузкой новых моделей');
     clearScene();
 
     const progressContainer = document.getElementById('progress-container');
@@ -290,79 +288,93 @@ async function loadSelectedModels(selectedFiles, driveId) {
     let loadedFiles = 0;
     let totalProgress = 0;
 
-    try {
-        // Получаем содержимое папки для поиска связанных файлов
-        const folderContents = await getFolderContents(driveId, selectedFiles[0].parentReference.id);
-        const allFiles = folderContents.value;
+    // Кэш для хранения загруженных файлов
+    const fileCache = new Map();
 
-        for (const file of selectedFiles) {
-            console.log('Начало загрузки модели', { fileName: file.name, fileId: file.id });
-            try {
-                const accessToken = await getAccessToken();
-                const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${file.id}/content`, {
-                    headers: { 'Authorization': `Bearer ${accessToken}` }
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Ошибка при получении файла: ${response.statusText}`);
-                }
-
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-
-                console.log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
-
-                const model = await loadModel(url, file.name,
-                    // Функция обновления прогресса
-                    (progress) => {
-                        const fileProgress = progress * (1 / totalFiles);
-                        totalProgress = (loadedFiles / totalFiles) + fileProgress;
-                        const progressPercentage = Math.round(totalProgress * 100);
-                        progressBar.style.width = `${progressPercentage}%`;
-                        progressText.textContent = `${progressPercentage}% completed`;
-                    },
-                    // Функция для получения связанных файлов (например, .bin для gltf)
-                    async (resourceName) => {
-                        const relatedFile = allFiles.find(f => f.name === resourceName);
-                        if (relatedFile) {
-                            const relatedResponse = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${relatedFile.id}/content`, {
-                                headers: { 'Authorization': `Bearer ${accessToken}` }
-                            });
-                            if (relatedResponse.ok) {
-                                return await relatedResponse.arrayBuffer();
-                            } else {
-                                throw new Error(`Ошибка при загрузке файла ${resourceName}: ${relatedResponse.statusText}`);
-                            }
-                        } else {
-                            throw new Error(`Файл ${resourceName} не найден`);
-                        }
-                    }
-                );
-
-                if (model) {
-                    console.log('Модель успешно загружена и добавлена на сцену', { fileName: file.name });
-                } else {
-                    console.error('Ошибка: модель не была возвращена функцией loadModel', { fileName: file.name });
-                }
-
-                URL.revokeObjectURL(url);
-
-                loadedFiles++;
-            } catch (error) {
-                console.error('Ошибка при загрузке модели', { fileName: file.name, error: error.message });
-            }
+    // Функция для загрузки файла из SharePoint
+    async function loadFileFromSharePoint(fileId) {
+        if (fileCache.has(fileId)) {
+            return fileCache.get(fileId);
         }
 
-        console.log('Загрузка и отображение моделей завершены');
-        fitCameraToScene();
+        const accessToken = await getAccessToken();
+        const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${fileId}/content`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
 
-        debugScene();
-    } catch (error) {
-        console.error('Ошибка при загрузке моделей:', error);
-    } finally {
-        setTimeout(() => {
-            progressContainer.style.display = 'none';
-        }, 1000);
+        if (!response.ok) {
+            throw new Error(`Ошибка загрузки файла: ${response.statusText}`);
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        fileCache.set(fileId, url);
+        return url;
+    }
+
+    // Загрузка всех файлов из текущей папки
+    const folderContents = await getFolderContents(driveId, selectedFiles[0].parentReference.id);
+    const allFiles = folderContents.value;
+
+    for (const file of selectedFiles) {
+        try {
+            console.log(`Загрузка модели: ${file.name}`);
+            const fileUrl = await loadFileFromSharePoint(file.id);
+
+            let model;
+            if (file.name.toLowerCase().endsWith('.ifc')) {
+                model = await loadIFCModel(fileUrl, file.name, updateProgress);
+            } else if (file.name.toLowerCase().endsWith('.gltf') || file.name.toLowerCase().endsWith('.glb')) {
+                // Для gltf файлов ищем связанный .bin файл
+                const binFileName = file.name.replace(/\.(gltf|glb)$/, '.bin');
+                const binFile = allFiles.find(f => f.name === binFileName);
+
+                if (binFile) {
+                    const binUrl = await loadFileFromSharePoint(binFile.id);
+                    model = await loadGLTFModel(fileUrl, file.name, updateProgress, async (resourcePath) => {
+                        if (resourcePath.endsWith('.bin')) {
+                            return binUrl;
+                        }
+                        return resourcePath;
+                    });
+                } else {
+                    console.warn(`Файл .bin не найден для ${file.name}`);
+                    model = await loadGLTFModel(fileUrl, file.name, updateProgress);
+                }
+            } else {
+                console.warn(`Неподдерживаемый формат файла: ${file.name}`);
+                continue;
+            }
+
+            if (model) {
+                viewer.scene.add(model);
+                console.log(`Модель ${file.name} успешно загружена и добавлена на сцену`);
+            } else {
+                console.error(`Не удалось загрузить модель ${file.name}`);
+            }
+
+            loadedFiles++;
+        } catch (error) {
+            console.error(`Ошибка при загрузке модели ${file.name}:`, error);
+        }
+    }
+
+    fitCameraToScene();
+    debugScene();
+
+    // Очистка кэша
+    for (const url of fileCache.values()) {
+        URL.revokeObjectURL(url);
+    }
+
+    progressContainer.style.display = 'none';
+
+    function updateProgress(progress) {
+        const fileProgress = progress / totalFiles;
+        totalProgress = (loadedFiles / totalFiles) + fileProgress;
+        const progressPercentage = Math.round(totalProgress * 100);
+        progressBar.style.width = `${progressPercentage}%`;
+        progressText.textContent = `${progressPercentage}% завершено`;
     }
 }
 
