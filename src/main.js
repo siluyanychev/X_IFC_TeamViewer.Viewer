@@ -1,6 +1,6 @@
 ﻿import { msalConfig, loginRequest } from './config.js';
 import { PROJECT_DATA } from './projectData.js';
-import { initViewer, loadIFCModel, clearScene, fitCameraToScene, debugScene } from './viewer.js';
+import { initViewer, loadModel, clearScene, fitCameraToScene, debugScene } from './viewer.js';
 
 let viewer;
 let msalInstance;
@@ -162,7 +162,9 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
                     displayFolderStructure(subFolderContents.value, null, driveId, folderContent);
                 }
             };
-        } else if (item.name.toLowerCase().endsWith('.ifc')) {
+        } else if (item.name.toLowerCase().endsWith('.ifc') ||
+            item.name.toLowerCase().endsWith('.gltf') ||
+            item.name.toLowerCase().endsWith('.glb')) {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.className = 'file-checkbox';
@@ -195,7 +197,7 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
         loadButton.onclick = () => {
             const selectedFiles = getSelectedFiles();
             if (selectedFiles.length > 0) {
-                loadSelectedIFCModels(selectedFiles, driveId);
+                loadSelectedModels(selectedFiles, driveId);
             } else {
                 alert('Пожалуйста, выберите файлы для загрузки');
             }
@@ -258,8 +260,8 @@ function getSelectedFiles() {
     }));
 }
 
-async function loadSelectedIFCModels(selectedFiles, driveId) {
-    log('Начало загрузки выбранных IFC моделей', { selectedFilesCount: selectedFiles.length });
+async function loadSelectedModels(selectedFiles, driveId) {
+    log('Начало загрузки выбранных моделей', { selectedFilesCount: selectedFiles.length });
 
     if (!viewer) {
         log('Viewer не инициализирован, начинаем инициализацию');
@@ -284,7 +286,7 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
     let totalProgress = 0;
 
     for (const file of selectedFiles) {
-        log('Начало загрузки IFC модели', { fileName: file.name, fileId: file.id });
+        log('Начало загрузки модели', { fileName: file.name, fileId: file.id });
         try {
             const accessToken = await getAccessToken();
             const response = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${file.id}/content`, {
@@ -299,7 +301,7 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
             const url = URL.createObjectURL(blob);
 
             log('Файл получен, начинаем загрузку в viewer', { fileName: file.name });
-            const model = await loadIFCModel(url, file.name, (progress) => {
+            const model = await loadModel(url, file.name, (progress) => {
                 const fileProgress = progress * (1 / totalFiles);
                 totalProgress = (loadedFiles / totalFiles) + fileProgress;
                 const progressPercentage = Math.round(totalProgress * 100);
@@ -308,26 +310,24 @@ async function loadSelectedIFCModels(selectedFiles, driveId) {
             });
 
             if (model) {
-                log('IFC модель успешно загружена и добавлена на сцену', { fileName: file.name });
+                log('Модель успешно загружена и добавлена на сцену', { fileName: file.name });
             } else {
-                console.error('Ошибка: модель не была возвращена функцией loadIFCModel', { fileName: file.name });
+                console.error('Ошибка: модель не была возвращена функцией loadModel', { fileName: file.name });
             }
 
             URL.revokeObjectURL(url);
 
             loadedFiles++;
         } catch (error) {
-            console.error('Ошибка при загрузке IFC модели', { error: error.message, stack: error.stack });
+            console.error('Ошибка при загрузке модели', { error: error.message, stack: error.stack });
         }
     }
 
-    log('Загрузка и отображение IFC моделей завершены');
+    log('Загрузка и отображение моделей завершены');
     fitCameraToScene();
 
-    // Вызываем функцию отладки
     debugScene();
 
-    // Скрываем прогресс-бар после завершения загрузки
     setTimeout(() => {
         progressContainer.style.display = 'none';
     }, 1000);

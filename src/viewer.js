@@ -1,12 +1,13 @@
 ﻿import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { IFCLoader } from 'web-ifc-three/IFCLoader';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 let scene, camera, renderer, controls;
-let ifcLoader;
+let ifcLoader, gltfLoader;
 
 export function initViewer() {
-    console.log('Начало инициализации IFC viewer');
+    console.log('Начало инициализации viewer');
     const container = document.getElementById('viewer-container');
     if (!container) {
         console.error('Не найден элемент с id "viewer-container"');
@@ -27,7 +28,7 @@ export function initViewer() {
     console.log('Renderer создан и добавлен в DOM');
 
     controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; // Добавляет инерцию
+    controls.enableDamping = true;
     controls.dampingFactor = 0.25;
     controls.screenSpacePanning = false;
     controls.maxPolarAngle = Math.PI / 2;
@@ -44,12 +45,15 @@ export function initViewer() {
     ifcLoader.ifcManager.setWasmPath('/web-ifc/');
     console.log('IFCLoader инициализирован');
 
+    gltfLoader = new GLTFLoader();
+    console.log('GLTFLoader инициализирован');
+
     window.addEventListener('resize', onWindowResize);
 
     animate();
 
-    console.log('IFC viewer инициализирован');
-    return { scene, camera, renderer, controls, ifcLoader };
+    console.log('Viewer инициализирован');
+    return { scene, camera, renderer, controls, ifcLoader, gltfLoader };
 }
 
 function onWindowResize() {
@@ -61,7 +65,7 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
-    controls.update(); // Обновляем контролы в каждом кадре
+    controls.update();
     renderer.render(scene, camera);
 }
 
@@ -78,7 +82,6 @@ export function clearScene() {
         scene.remove(scene.children[0]);
     }
 
-    // Добавляем базовое освещение после очистки сцены
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
 
@@ -87,6 +90,30 @@ export function clearScene() {
     scene.add(directionalLight);
 
     console.log('Сцена очищена');
+}
+
+export async function loadModel(url, fileName, onProgress) {
+    console.log(`Начало загрузки модели: ${fileName}`);
+    try {
+        let model;
+        if (fileName.toLowerCase().endsWith('.ifc')) {
+            model = await loadIFCModel(url, fileName, onProgress);
+        } else if (fileName.toLowerCase().endsWith('.gltf') || fileName.toLowerCase().endsWith('.glb')) {
+            model = await loadGLTFModel(url, fileName, onProgress);
+        } else {
+            throw new Error('Неподдерживаемый формат файла');
+        }
+
+        scene.add(model);
+        console.log(`Модель ${fileName} добавлена в сцену`);
+
+        fitCameraToScene();
+
+        return model;
+    } catch (error) {
+        console.error(`Ошибка при загрузке модели ${fileName}:`, error);
+        return null;
+    }
 }
 
 export async function loadIFCModel(url, fileName, onProgress) {
@@ -145,7 +172,50 @@ export async function loadIFCModel(url, fileName, onProgress) {
         return null;
     }
 }
+async function loadGLTFModel(url, fileName, onProgress) {
+    return new Promise((resolve, reject) => {
+        gltfLoader.load(
+            url,
+            (gltf) => {
+                const model = gltf.scene;
+                applyMaterialToModel(model, fileName);
+                resolve(model);
+            },
+            (progress) => {
+                const percentage = progress.loaded / progress.total;
+                console.log(`Загрузка ${fileName}: ${Math.round(percentage * 100)}%`);
+                if (onProgress) {
+                    onProgress(percentage);
+                }
+            },
+            (error) => reject(error)
+        );
+    });
+}
 
+function applyMaterialToModel(model, fileName) {
+    let color;
+    if (fileName.startsWith('AR')) {
+        color = new THREE.Color(0xFFA500); // Оранжевый
+    } else if (fileName.startsWith('HV')) {
+        color = new THREE.Color(0x0000FF); // Синий
+    } else if (fileName.startsWith('TS')) {
+        color = new THREE.Color(0x8A2BE2); // Фиолетовый
+    }
+
+    if (color) {
+        model.traverse((child) => {
+            if (child.isMesh) {
+                child.material = new THREE.MeshPhongMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0.7,
+                    side: THREE.DoubleSide
+                });
+            }
+        });
+    }
+}
 export function fitCameraToScene() {
     const box = new THREE.Box3().setFromObject(scene);
     const center = box.getCenter(new THREE.Vector3());
@@ -155,12 +225,11 @@ export function fitCameraToScene() {
     const fov = camera.fov * (Math.PI / 180);
     let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
 
-    cameraZ *= 1.5; // Увеличиваем расстояние, чтобы вся сцена поместилась в кадр
+    cameraZ *= 1.5;
 
     camera.position.set(center.x, center.y, center.z + cameraZ);
     camera.lookAt(center);
 
-    // Обновляем контролы
     controls.target.copy(center);
     controls.maxDistance = cameraZ * 2;
     controls.update();
