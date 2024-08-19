@@ -92,14 +92,14 @@ export function clearScene() {
     console.log('Сцена очищена');
 }
 
-export async function loadModel(url, fileName, onProgress, getFileContent) {
+export async function loadModel(url, fileName, onProgress) {
     console.log(`Начало загрузки модели: ${fileName}`);
     try {
         let model;
         if (fileName.toLowerCase().endsWith('.ifc')) {
             model = await loadIFCModel(url, fileName, onProgress);
         } else if (fileName.toLowerCase().endsWith('.gltf') || fileName.toLowerCase().endsWith('.glb')) {
-            model = await loadGLTFModel(url, fileName, onProgress, getFileContent);
+            model = await loadGLTFModel(url, fileName, onProgress);
         } else {
             throw new Error('Неподдерживаемый формат файла');
         }
@@ -172,11 +172,36 @@ export async function loadIFCModel(url, fileName, onProgress) {
         return null;
     }
 }
-async function loadGLTFModel(url, fileName, onProgress, getFileContent) {
-    console.log(`Начало загрузки GLTF модели: ${fileName}`);
+async function loadGLTFModel(url, fileName, onProgress) {
+    const gltfLoader = new GLTFLoader();
+
+    // Загружаем .gltf файл
+    const gltfResponse = await fetch(url);
+    const gltfBlob = await gltfResponse.blob();
+    const gltfText = await gltfBlob.text();
+    const gltfJson = JSON.parse(gltfText);
+
+    // Получаем имя .bin файла из .gltf
+    const binFileName = gltfJson.buffers[0].uri;
+
+    // Загружаем .bin файл
+    const binUrl = url.replace(fileName, binFileName);
+    const binResponse = await fetch(binUrl);
+    const binBlob = await binResponse.blob();
+
+    // Создаем объект File для .gltf и .bin
+    const gltfFile = new File([gltfBlob], fileName, { type: 'model/gltf+json' });
+    const binFile = new File([binBlob], binFileName, { type: 'application/octet-stream' });
+
+    // Создаем объект для хранения файлов
+    const files = {
+        [fileName]: gltfFile,
+        [binFileName]: binFile
+    };
+
     return new Promise((resolve, reject) => {
         gltfLoader.load(
-            url,
+            URL.createObjectURL(gltfFile),
             (gltf) => {
                 const model = gltf.scene;
                 applyMaterialToModel(model, fileName);
@@ -189,22 +214,13 @@ async function loadGLTFModel(url, fileName, onProgress, getFileContent) {
                     onProgress(percentage);
                 }
             },
-            (error) => {
-                console.error(`Ошибка при загрузке GLTF модели ${fileName}:`, error);
-                reject(error);
-            },
-            async (resource) => {
-                if (resource.endsWith('.bin')) {
-                    console.log(`Запрос на загрузку .bin файла: ${resource}`);
-                    try {
-                        const content = await getFileContent(resource);
-                        return URL.createObjectURL(new Blob([content]));
-                    } catch (error) {
-                        console.error(`Ошибка при загрузке .bin файла ${resource}:`, error);
-                        throw error;
-                    }
+            (error) => reject(error),
+            (path, loader) => {
+                const file = files[path] || files[path.replace('./', '')];
+                if (file) {
+                    return URL.createObjectURL(file);
                 }
-                return resource;
+                return path;
             }
         );
     });
