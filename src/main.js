@@ -121,15 +121,20 @@ async function loadIFCFiles(sharedLink, projectName, specificPath) {
 }
 
 function displayFolderStructure(items, projectName, driveId, parentElement = null) {
-    log(`Отображение структуры для проекта ${projectName}, количество элементов: ${items.length}`);
+    console.log(`Отображение структуры для проекта ${projectName}, количество элементов: ${items.length}`);
     const structureElement = parentElement || document.getElementById('folder-structure');
+
     if (!parentElement) {
         structureElement.innerHTML = `<h2 class="text-xl font-bold mb-4">${projectName}</h2>`;
     }
+
     const ul = document.createElement('ul');
 
+    // Сохраняем информацию о всех файлах в текущей папке
+    window.currentFolderFiles = items;
+
     items.forEach(item => {
-        log(`Обработка элемента: ${item.name}, тип: ${item.folder ? 'папка' : 'файл'}`);
+        console.log(`Обработка элемента: ${item.name}, тип: ${item.folder ? 'папка' : 'файл'}`);
         const li = document.createElement('li');
         li.className = item.folder ? 'folder' : 'file';
 
@@ -157,7 +162,7 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
                 li.classList.toggle('open');
                 toggleButton.textContent = li.classList.contains('open') ? '▼' : '▶';
                 if (li.classList.contains('open') && folderContent.children.length === 0) {
-                    log(`Загрузка содержимого папки: ${item.name}`);
+                    console.log(`Загрузка содержимого папки: ${item.name}`);
                     const subFolderContents = await getFolderContents(driveId, item.id);
                     displayFolderStructure(subFolderContents.value, null, driveId, folderContent);
                 }
@@ -183,6 +188,11 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
                 event.stopPropagation();
                 updateLoadButton();
             };
+        } else {
+            // Для других типов файлов просто отображаем имя
+            const fileName = document.createElement('span');
+            fileName.textContent = item.name;
+            li.appendChild(fileName);
         }
 
         ul.appendChild(li);
@@ -197,7 +207,7 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
         loadButton.onclick = () => {
             const selectedFiles = getSelectedFiles();
             if (selectedFiles.length > 0) {
-                loadSelectedModels(selectedFiles, driveId);
+                loadSelectedModels(selectedFiles, driveId, window.currentFolderFiles);
             } else {
                 alert('Пожалуйста, выберите файлы для загрузки');
             }
@@ -205,7 +215,23 @@ function displayFolderStructure(items, projectName, driveId, parentElement = nul
         structureElement.appendChild(loadButton);
     }
 
-    log('Структура папок отображена');
+    console.log('Структура папок отображена');
+}
+
+function getSelectedFiles() {
+    const checkboxes = document.querySelectorAll('.file-checkbox:checked');
+    return Array.from(checkboxes).map(checkbox => ({
+        id: checkbox.dataset.fileId,
+        name: checkbox.dataset.fileName
+    }));
+}
+
+function updateLoadButton() {
+    const selectedFiles = getSelectedFiles();
+    const loadButton = document.getElementById('load-selected-files');
+    if (loadButton) {
+        loadButton.textContent = `Загрузить выбранные файлы (${selectedFiles.length})`;
+    }
 }
 
 function setupFolderStructureVisibility() {
@@ -244,23 +270,8 @@ function setupFolderStructureVisibility() {
     });
 }
 
-function updateLoadButton() {
-    const selectedFiles = getSelectedFiles();
-    const loadButton = document.getElementById('load-selected-files');
-    if (loadButton) {
-        loadButton.textContent = `Загрузить выбранные файлы (${selectedFiles.length})`;
-    }
-}
 
-function getSelectedFiles() {
-    const checkboxes = document.querySelectorAll('.file-checkbox:checked');
-    return Array.from(checkboxes).map(checkbox => ({
-        id: checkbox.dataset.fileId,
-        name: checkbox.dataset.fileName
-    }));
-}
-
-async function loadSelectedModels(selectedFiles, driveId) {
+async function loadSelectedModels(selectedFiles, driveId, allFiles) {
     console.log('Начало загрузки выбранных моделей', { selectedFilesCount: selectedFiles.length, driveId });
 
     if (!viewer) {
@@ -270,7 +281,7 @@ async function loadSelectedModels(selectedFiles, driveId) {
             console.error('ОШИБКА: Не удалось инициализировать viewer');
             return;
         }
-        console.log('Viewer успешно инициализирован', viewer);
+        console.log('Viewer успешно инициализирован');
     }
 
     console.log('Очистка сцены перед загрузкой новых моделей');
@@ -287,7 +298,6 @@ async function loadSelectedModels(selectedFiles, driveId) {
 
     for (const file of selectedFiles) {
         console.log('Начало загрузки модели', { fileName: file.name, fileId: file.id });
-        console.log('Полная информация о файле:', JSON.stringify(file, null, 2));
 
         try {
             const accessToken = await getAccessToken();
@@ -312,29 +322,21 @@ async function loadSelectedModels(selectedFiles, driveId) {
                 const binFileName = file.name.replace('.gltf', '.bin');
                 console.log('Ожидаемое имя .bin файла:', binFileName);
 
-                // Пытаемся найти .bin файл в том же каталоге
-                const folderContents = await getFolderContents(driveId, file.parentReference?.id || '');
-                console.log('Содержимое папки:', folderContents);
-
-                if (folderContents && folderContents.value) {
-                    const binFile = folderContents.value.find(item => item.name === binFileName);
-                    if (binFile) {
-                        console.log('Найден соответствующий .bin файл', binFile);
-                        const binResponse = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${binFile.id}/content`, {
-                            headers: { 'Authorization': `Bearer ${accessToken}` }
-                        });
-                        if (binResponse.ok) {
-                            const binBlob = await binResponse.blob();
-                            binUrl = URL.createObjectURL(binBlob);
-                            console.log(`Соответствующий .bin файл загружен: ${binFileName}`, { binUrl });
-                        } else {
-                            console.log(`Ошибка при получении .bin файла: ${binResponse.statusText}`);
-                        }
+                const binFile = allFiles.find(f => f.name === binFileName);
+                if (binFile) {
+                    console.log('Найден соответствующий .bin файл', binFile);
+                    const binResponse = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${binFile.id}/content`, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    });
+                    if (binResponse.ok) {
+                        const binBlob = await binResponse.blob();
+                        binUrl = URL.createObjectURL(binBlob);
+                        console.log(`Соответствующий .bin файл загружен: ${binFileName}`, { binUrl });
                     } else {
-                        console.log(`Предупреждение: Не найден соответствующий .bin файл для ${file.name}`);
+                        console.log(`Ошибка при получении .bin файла: ${binResponse.statusText}`);
                     }
                 } else {
-                    console.log(`Не удалось получить содержимое папки для файла ${file.name}`);
+                    console.log(`Предупреждение: Не найден соответствующий .bin файл для ${file.name}`);
                 }
             }
 
@@ -373,6 +375,7 @@ async function loadSelectedModels(selectedFiles, driveId) {
         progressContainer.style.display = 'none';
     }, 1000);
 }
+
 async function initApp() {
     log('DOM загружен, начало инициализации приложения');
     try {
