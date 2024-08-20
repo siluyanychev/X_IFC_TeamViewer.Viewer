@@ -260,7 +260,7 @@ function setupFolderStructureVisibility() {
 
     folderStructure.addEventListener('mouseenter', () => {
         clearTimeout(timeout);
-        showPanel();
+        showPanel();//
     });
 
     folderStructure.addEventListener('mouseleave', (event) => {
